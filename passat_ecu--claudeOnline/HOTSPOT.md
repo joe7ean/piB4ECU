@@ -1,0 +1,95 @@
+# Hotspot Bridge (passatpi) - Auto Betrieb
+
+Dieses Runbook beschreibt die Schritte, um den Raspberry Pi Zero 2W (`passatpi`) als WLAN-Hotspot für das Dashboard zu betreiben.
+
+## Ziel
+
+- Der Raspi sendet ein WLAN `PassatECU`.
+- Dein Handy/PC verbindet sich mit dem WLAN.
+- Dashboard ist erreichbar unter `http://192.168.4.1:8000`.
+- Der KKL/K-Line Adapter bleibt kabelgebunden am Raspi.
+
+## Vorbedingungen (empfohlen)
+
+- Dashboard/Server läuft bereits als `systemd` Service (`passat-ecu.service`) im Heimnetz.
+- USB-Serial Device ist vorhanden, z.B. `/dev/ttyUSB0`.
+
+## Hotspot einrichten (mit Auto-Interface-Erkennung)
+
+### 1) WLAN-Interface ermitteln
+
+```bash
+sudo apt install -y iw
+WIFI_IFACE="$(iw dev | awk '$1=="Interface"{print $2; exit}')"
+echo "Hotspot uses interface: ${WIFI_IFACE}"
+```
+
+### 2) Pakete installieren
+
+```bash
+sudo apt install -y hostapd dnsmasq
+```
+
+### 3) `hostapd.conf` schreiben
+
+```bash
+sudo tee /etc/hostapd/hostapd.conf > /dev/null <<EOF
+interface=${WIFI_IFACE}
+ssid=PassatECU
+hw_mode=g
+channel=6
+wpa=2
+wpa_passphrase=passat1994
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=CCMP
+EOF
+```
+
+### 4) DHCP via `dnsmasq` aktivieren
+
+```bash
+sudo tee -a /etc/dnsmasq.conf > /dev/null <<EOF
+interface=${WIFI_IFACE}
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+EOF
+```
+
+### 5) Statische IP (Gateway) via `dhcpcd`
+
+```bash
+sudo tee -a /etc/dhcpcd.conf > /dev/null <<EOF
+interface ${WIFI_IFACE}
+static ip_address=192.168.4.1/24
+nohook wpa_supplicant
+EOF
+```
+
+### 6) wpa_supplicant deaktivieren (wenn vorhanden)
+
+```bash
+sudo systemctl disable --now "wpa_supplicant@${WIFI_IFACE}.service" 2>/dev/null || true
+```
+
+### 7) Dienste starten + reboot
+
+```bash
+sudo systemctl unmask hostapd
+sudo systemctl enable hostapd dnsmasq
+sudo reboot
+```
+
+## Verbindungstest im Auto
+
+1. Handy verbindet sich mit `PassatECU`
+2. Browser -> `http://192.168.4.1:8000`
+3. In der `passat-ecu.service` Ausgabe sollten periodisch ECU-Requests / mögliche Timeouts auftauchen, bis die ECU wirklich verbunden ist.
+
+## Recovery (wenn Hotspot nicht anspringt)
+
+```bash
+sudo systemctl disable --now hostapd dnsmasq
+sudo systemctl reboot
+```
+
+Wenn SSH weg ist: lokal am Raspi (Keyboard/Monitor) oder per SD-Karten-Edit wieder herholen.
+

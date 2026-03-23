@@ -73,10 +73,27 @@ hostname -I
 # → Als "Zum Home-Bildschirm" speichern → verhält sich wie eine native App!
 
 # Option B — Raspi als Hotspot (kein Router nötig, ideal im Auto)
+#
+# Ziel: Der Raspi (passatpi) sendet sein eigenes WLAN, während dein KKL/K-Line Adapter
+# am Raspi über USB/Serial hängt. Das Dashboard ist dann im Auto unter
+# `http://192.168.4.1:8000` erreichbar.
+#
+# Wichtiger Hinweis:
+# - Nach Aktivierung des Hotspots kann die Heimnetz-SSH-Verbindung brechen.
+#   Das ist erwartbar.
+# - Wenn du dich ausgesperrt fühlst: Recovery unten nutzen.
+
+# 6.1 WLAN-Interface automatisch bestimmen (statt hardcoded wlan0)
+sudo apt install -y iw >/dev/null
+WIFI_IFACE="$(iw dev | awk '$1=="Interface"{print $2; exit}')"
+echo "Hotspot uses interface: ${WIFI_IFACE}"
+
+# 6.2 Pakete installieren
 sudo apt install -y hostapd dnsmasq
 
-sudo tee /etc/hostapd/hostapd.conf > /dev/null << 'EOF'
-interface=wlan0
+# 6.3 hostapd konfigurieren
+sudo tee /etc/hostapd/hostapd.conf > /dev/null <<EOF
+interface=${WIFI_IFACE}
 ssid=PassatECU
 hw_mode=g
 channel=6
@@ -86,25 +103,36 @@ wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 EOF
 
-# dnsmasq konfigurieren für DHCP:
-sudo tee -a /etc/dnsmasq.conf > /dev/null << 'EOF'
-interface=wlan0
+# 6.4 dnsmasq konfigurieren (DHCP für Clients im Auto)
+sudo tee -a /etc/dnsmasq.conf > /dev/null <<EOF
+interface=${WIFI_IFACE}
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
 EOF
 
-# Statische IP für wlan0:
-sudo tee -a /etc/dhcpcd.conf > /dev/null << 'EOF'
-interface wlan0
+# 6.5 Statische IP am Raspi (Gateway für den Hotspot)
+sudo tee -a /etc/dhcpcd.conf > /dev/null <<EOF
+interface ${WIFI_IFACE}
 static ip_address=192.168.4.1/24
 nohook wpa_supplicant
 EOF
 
+# 6.6 wpa_supplicant für dieses Interface deaktivieren (falls systemd-Unit existiert)
+sudo systemctl disable --now "wpa_supplicant@${WIFI_IFACE}.service" 2>/dev/null || true
+
+# 6.7 Dienste aktivieren + reboot
 sudo systemctl unmask hostapd
 sudo systemctl enable hostapd dnsmasq
 sudo reboot
 
-# Nach Reboot: iPhone verbindet sich mit WLAN "PassatECU"
-# Dashboard: http://192.168.4.1:8000
+# Nach Reboot:
+# - iPhone/Handy verbindet sich mit WLAN "PassatECU"
+# - Dashboard: http://192.168.4.1:8000
+
+# Recovery (falls Hotspot nicht geht):
+# - SSH notfalls über lokalen Zugriff/SD-Card/Keyboard herstellen
+# - Dann:
+#   sudo systemctl disable --now hostapd dnsmasq
+#   sudo systemctl reboot
 
 # ── 7. Als PWA zum iPhone-Homescreen hinzufügen ───────────────────────────────
 # Safari → Teilen-Button → "Zum Home-Bildschirm"

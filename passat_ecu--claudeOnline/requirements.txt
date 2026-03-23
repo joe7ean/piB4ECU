@@ -1,0 +1,4 @@
+# requirements.txt — Passat B4 ECU Dashboard
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+pyserial==3.5

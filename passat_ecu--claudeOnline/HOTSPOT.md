@@ -1,4 +1,4 @@
-# Hotspot Bridge (passatpi) - Auto Betrieb
+# Hotspot Bridge (passatpi) - Auto (Fahrzeug) Betrieb
 
 Dieses Runbook beschreibt die Schritte, um den Raspberry Pi Zero 2W (`passatpi`) als WLAN-Hotspot für das Dashboard zu betreiben.
 
@@ -54,19 +54,35 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
 EOF
 ```
 
-### 5) Statische IP (Gateway) via `dhcpcd`
+### 5) Statische Hotspot-IP (Gateway) via systemd oneshot setzen
+
+> Vorteil: funktioniert auch, wenn `dhcpcd` inaktiv ist.
 
 ```bash
-sudo tee -a /etc/dhcpcd.conf > /dev/null <<EOF
-interface ${WIFI_IFACE}
-static ip_address=192.168.4.1/24
-nohook wpa_supplicant
+sudo tee /etc/systemd/system/passatpi-hotspot-ip.service > /dev/null <<EOF
+[Unit]
+Description=Set static IP for PassatECU hotspot (${WIFI_IFACE})
+After=hostapd.service
+Wants=hostapd.service
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip addr replace 192.168.4.1/24 dev ${WIFI_IFACE}
+ExecStartPost=/bin/systemctl restart dnsmasq
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
 EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable passatpi-hotspot-ip
 ```
 
-### 6) wpa_supplicant deaktivieren (wenn vorhanden)
+### 6) Client-WLAN dauerhaft deaktivieren (damit Heimnetz nicht automatisch „greift“)
 
 ```bash
+sudo systemctl disable --now NetworkManager 2>/dev/null || true
 sudo systemctl disable --now "wpa_supplicant@${WIFI_IFACE}.service" 2>/dev/null || true
 ```
 
@@ -88,6 +104,7 @@ sudo reboot
 
 ```bash
 sudo systemctl disable --now hostapd dnsmasq
+sudo systemctl disable --now passatpi-hotspot-ip
 sudo systemctl reboot
 ```
 

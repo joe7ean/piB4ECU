@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from kw1281 import KW1281, ECU_ENGINE, KW1281Error
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-SERIAL_PORT      = "/dev/ttyUSB0"   # KKL USB adapter
+SERIAL_PORT      = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Cable_12345678-if00-port0"   # KKL USB adapter
 POLL_INTERVAL    = 0.8              # Sekunden zwischen ECU-Abfragen
 FAULT_INTERVAL   = 30              # Fehlerspeicher alle N Sekunden lesen
 DEMO_MODE        = False            # True = simulierte Daten, kein KKL nötig

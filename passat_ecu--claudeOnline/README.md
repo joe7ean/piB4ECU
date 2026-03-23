@@ -40,4 +40,5 @@ Werte sind danach erreichbar unter:
 
 - Der Webserver erwartet `dashboard.html` im selben Verzeichnis wie `server.py` (WorkingDirectory in systemd ist dafür wichtig).
 - Wenn das ECU nicht erreichbar ist, kommen im Log Timeouts: das ist normal solange kein ECU am Adapter hängt bzw. Zündung/Init nicht stimmt.
+- Hotspot-Gateway-IP (`192.168.4.1/24`) wird per systemd oneshot gesetzt (damit es auch ohne `dhcpcd` nach Reboot zuverlässig funktioniert).
 

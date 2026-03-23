@@ -109,14 +109,29 @@ interface=${WIFI_IFACE}
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
 EOF
 
-# 6.5 Statische IP am Raspi (Gateway für den Hotspot)
-sudo tee -a /etc/dhcpcd.conf > /dev/null <<EOF
-interface ${WIFI_IFACE}
-static ip_address=192.168.4.1/24
-nohook wpa_supplicant
+# 6.5 Statische Hotspot-IP (Gateway) per systemd oneshot setzen
+# Hintergrund: In deinem Setup ist `dhcpcd` inaktiv, deshalb verwenden wir nicht /etc/dhcpcd.conf.
+sudo tee /etc/systemd/system/passatpi-hotspot-ip.service > /dev/null <<EOF
+[Unit]
+Description=Set static IP for PassatECU hotspot (${WIFI_IFACE})
+After=hostapd.service
+Wants=hostapd.service
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ip addr replace 192.168.4.1/24 dev ${WIFI_IFACE}
+ExecStartPost=/bin/systemctl restart dnsmasq
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
-# 6.6 wpa_supplicant für dieses Interface deaktivieren (falls systemd-Unit existiert)
+sudo systemctl daemon-reload
+sudo systemctl enable passatpi-hotspot-ip
+
+# 6.6 Client-WLAN dauerhaft deaktivieren (damit Heimnetz nicht automatisch „greift“)
+sudo systemctl disable --now NetworkManager 2>/dev/null || true
 sudo systemctl disable --now "wpa_supplicant@${WIFI_IFACE}.service" 2>/dev/null || true
 
 # 6.7 Dienste aktivieren + reboot

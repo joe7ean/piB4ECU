@@ -64,6 +64,28 @@
   }
   .content.active { display: block; }
 
+  /* ── Smart Feedback Banner ── */
+  .smart-banner {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-left: 4px solid var(--blue);
+    transition: all 0.3s;
+  }
+  .smart-banner.cold { border-left-color: var(--blue); }
+  .smart-banner.warm { border-left-color: var(--amber); }
+  .smart-banner.hot { border-left-color: var(--green); }
+  .smart-banner.danger { border-left-color: var(--red); background: rgba(226,75,74,0.1); }
+  .smart-banner.eco { border-left-color: var(--green); background: rgba(29,158,117,0.1); }
+
+  .banner-icon { font-size: 24px; }
+  .banner-text h3 { font-size: 14px; margin-bottom: 2px; }
+  .banner-text p { font-size: 12px; color: var(--muted); }
+
   /* ── Cards ── */
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
@@ -82,14 +104,19 @@
   /* ── Sparkline ── */
   .spark { display: block; width: 100%; height: 40px; margin-top: 8px; }
 
-  /* ── Gauge ── */
-  .gauge-wrap { text-align: center; padding: 8px 0 4px; }
-  .gauge-svg  { width: 100%; max-width: 160px; }
-
   /* ── Mini values ── */
   .mini-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
   .mini-val  { font-size: 20px; font-weight: 600; }
   .mini-lbl  { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Bitmask ── */
+  .bitmask { display: flex; gap: 2px; margin-top: 8px; }
+  .bit {
+    flex: 1; height: 16px; border-radius: 3px;
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--muted); font-family: monospace;
+  }
+  .bit.on { background: var(--blue); color: #fff; }
 
   /* ── Faults ── */
   .fault-item {
@@ -105,16 +132,6 @@
   .fault-status{ font-size: 11px; color: var(--muted); margin-top: 2px; }
   .no-faults   { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 14px; }
 
-  /* ── Raw log ── */
-  .log-box {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 12px;
-    font-family: 'Menlo', 'Courier New', monospace; font-size: 11px;
-    color: #6a6; line-height: 1.8; max-height: 320px; overflow-y: auto;
-  }
-  .log-entry-rx { color: #5a9; }
-  .log-entry-tx { color: #666; }
-
   /* ── Action button ── */
   .btn {
     width: 100%; padding: 14px; border-radius: var(--radius);
@@ -123,6 +140,7 @@
     cursor: pointer; margin-top: 8px; transition: opacity .2s;
   }
   .btn:active { opacity: .6; }
+  .btn-primary { background: rgba(55,138,221,.15); color: var(--blue); border-color: rgba(55,138,221,.3); }
   .btn-danger { border-color: rgba(226,75,74,.4); color: var(--red); }
 
   /* ── Offline banner ── */
@@ -149,13 +167,21 @@
 
 <div class="tabs">
   <button class="tab active" onclick="showTab('drive')">Antrieb</button>
-  <button class="tab"        onclick="showTab('temp')">Temperaturen</button>
   <button class="tab"        onclick="showTab('faults')">Fehler</button>
-  <button class="tab"        onclick="showTab('raw')">Rohdaten</button>
 </div>
 
 <!-- ── ANTRIEB ── -->
 <div class="content active" id="tab-drive">
+  
+  <!-- Smart Feedback Banner -->
+  <div id="smart-banner" class="smart-banner cold">
+    <div class="banner-icon" id="banner-icon">❄️</div>
+    <div class="banner-text">
+        <h3 id="banner-title">Warte auf Daten</h3>
+        <p id="banner-desc">Verbinde mit Motorsteuergerät...</p>
+    </div>
+  </div>
+
   <div class="grid2">
     <div class="card" id="card-rpm">
       <div class="card-accent" style="background:var(--blue)"></div>
@@ -166,29 +192,6 @@
       </svg>
     </div>
     <div class="card">
-      <div class="card-accent" style="background:var(--green)"></div>
-      <div class="card-label">Geschwindigkeit</div>
-      <div><span class="card-value" id="v-speed">—</span><span class="card-unit">km/h</span></div>
-      <svg class="spark" id="spark-speed" viewBox="0 0 200 40" preserveAspectRatio="none">
-        <polyline id="pl-speed" fill="none" stroke="var(--green)" stroke-width="1.5" points=""/>
-      </svg>
-    </div>
-  </div>
-  <div class="grid3">
-    <div class="mini-card"><div class="mini-val" id="v-lambda">—</div><div class="mini-lbl">Lambda λ</div></div>
-    <div class="mini-card"><div class="mini-val" id="v-timing">—</div><div class="mini-lbl">Zündwinkel °</div></div>
-    <div class="mini-card"><div class="mini-val" id="v-inj">—</div><div class="mini-lbl">Einspritz. ms</div></div>
-  </div>
-  <div class="grid2">
-    <div class="mini-card"><div class="mini-val" id="v-tps">—</div><div class="mini-lbl">Drosselkl. %</div></div>
-    <div class="mini-card"><div class="mini-val" id="v-voltage">—</div><div class="mini-lbl">Batterie V</div></div>
-  </div>
-</div>
-
-<!-- ── TEMPERATUREN ── -->
-<div class="content" id="tab-temp">
-  <div class="grid2">
-    <div class="card">
       <div class="card-accent" style="background:var(--red)"></div>
       <div class="card-label">Kühlmittel</div>
       <div><span class="card-value" id="v-coolant">—</span><span class="card-unit">°C</span></div>
@@ -196,34 +199,47 @@
         <polyline id="pl-coolant" fill="none" stroke="var(--red)" stroke-width="1.5" points=""/>
       </svg>
     </div>
-    <div class="card">
-      <div class="card-accent" style="background:var(--blue)"></div>
-      <div class="card-label">Ansaugluft</div>
-      <div><span class="card-value" id="v-airtemp">—</span><span class="card-unit">°C</span></div>
-      <svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none">
-        <polyline id="pl-airtemp" fill="none" stroke="var(--blue)" stroke-width="1.5" points=""/>
-      </svg>
-    </div>
   </div>
-  <div class="section-label">Weitere Werte</div>
+  
   <div class="grid3">
-    <div class="mini-card"><div class="mini-val" id="v-map">—</div><div class="mini-lbl">Druck kPa</div></div>
-    <div class="mini-card"><div class="mini-val" id="v-airmass">—</div><div class="mini-lbl">Luftmasse g/s</div></div>
-    <div class="mini-card"><div class="mini-val" id="v-idle">—</div><div class="mini-lbl">Leerlauf %</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-lambda">—</div><div class="mini-lbl">Lambda λ</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-inj">—</div><div class="mini-lbl">Einspritz. ms</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-voltage">—</div><div class="mini-lbl">Batterie V</div></div>
+  </div>
+  
+  <div class="grid2">
+    <div class="mini-card"><div class="mini-val" id="v-airtemp">—</div><div class="mini-lbl">Ansaugluft °C</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-timing">—</div><div class="mini-lbl">Zündwinkel °</div></div>
+  </div>
+
+  <div class="card" style="margin-top: 10px;">
+    <div class="card-label" style="display: flex; justify-content: space-between;">
+      <span>Betriebszustand</span>
+      <span id="v-opstatus-text" style="color: var(--blue)">—</span>
+    </div>
+    <div class="bitmask" id="v-bitmask">
+      <div class="bit">8</div><div class="bit">7</div><div class="bit">6</div><div class="bit">5</div>
+      <div class="bit">4</div><div class="bit">3</div><div class="bit">2</div><div class="bit">1</div>
+    </div>
+    <div style="font-size: 10px; color: var(--muted); margin-top: 6px; display: flex; justify-content: space-between;">
+      <span id="lbl-b8">B8: Kaltstart</span>
+      <span id="lbl-b7">B7: Lambda</span>
+      <span id="lbl-b2">B2: Leerlauf</span>
+    </div>
   </div>
 </div>
 
 <!-- ── FEHLERCODES ── -->
 <div class="content" id="tab-faults">
-  <div id="fault-list"></div>
-  <button class="btn btn-danger" onclick="clearFaults()">Fehlerspeicher löschen</button>
-</div>
-
-<!-- ── ROHDATEN ── -->
-<div class="content" id="tab-raw">
-  <div class="section-label">KW1281 Seriell-Log</div>
-  <div class="log-box" id="raw-log"></div>
-  <button class="btn" onclick="document.getElementById('raw-log').innerHTML=''">Log leeren</button>
+  <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+    <button class="btn btn-primary" style="margin-top: 0;" onclick="readFaults()">Auslesen</button>
+    <button class="btn btn-danger" style="margin-top: 0;" onclick="clearFaults()">Löschen</button>
+  </div>
+  <div class="section-label" id="last-fault-sync" style="text-align: right; margin-top: -8px;">Zuletzt aktualisiert: Nie</div>
+  
+  <div id="fault-list">
+    <div class="no-faults">Bitte manuell auslesen.</div>
+  </div>
 </div>
 
 <script>
@@ -270,48 +286,158 @@ function renderData(data) {
   const rpm = get('Drehzahl');
   if (rpm !== undefined) { set('rpm', rpm); push('rpm', rpm); }
 
-  const speed = get('Geschwindigkeit');
-  if (speed !== undefined) { set('speed', speed); push('speed', speed); }
-
   const cool = get('Kühlmitteltemperatur');
   if (cool !== undefined) { set('coolant', cool); push('coolant', cool); }
-
-  const air = get('Ansauglufttemperatur');
-  if (air !== undefined) { set('airtemp', air); push('airtemp', air); }
 
   set('lambda',  get('Lambda'),        3);
   set('timing',  get('Zündwinkel'),    1);
   set('inj',     get('Einspritzzeit'), 2);
-  set('tps',     get('Drosselklappe'), 1);
   set('voltage', get('Spannung'),      1);
-  set('map',     get('Saugdruck'),     0);
-  set('airmass', get('Luftmasse'),     2);
-  set('idle',    get('Leerlaufregelung'), 0);
+  set('airtemp', get('Ansauglufttemperatur'), 0);
 
   // Update sparklines
-  const sparks = {rpm:'rpm', speed:'speed', coolant:'coolant', airtemp:'airtemp'};
+  const sparks = {rpm:'rpm', coolant:'coolant'};
   for (const [histKey, plId] of Object.entries(sparks)) {
     const pl = document.getElementById('pl-'+plId);
     if (pl) pl.setAttribute('points', sparkPoints(histKey));
   }
 
-  // Faults
-  renderFaults(data.faults || []);
+  // Operating Status Bitmask
+  const opStatus = get('Betriebszustand');
+  if (opStatus !== undefined) {
+    const binStr = opStatus.toString(2).padStart(8, '0');
+    const bitmaskEl = document.getElementById('v-bitmask');
+    let bitsHtml = '';
+    for (let i = 0; i < 8; i++) {
+        const isOn = binStr[i] === '1';
+        bitsHtml += `<div class="bit ${isOn ? 'on' : ''}">${8-i}</div>`;
+    }
+    bitmaskEl.innerHTML = bitsHtml;
 
-  // Raw log
-  const log = document.getElementById('raw-log');
-  const ts = new Date().toLocaleTimeString('de-DE');
-  const entries = Object.entries(d).slice(0, 4)
-    .map(([k,v]) => `<span class="log-entry-rx">[${ts}] ${k}: ${v.value} ${v.unit}</span>`)
-    .join('\n');
-  log.innerHTML = entries + (log.innerHTML ? '\n' + log.innerHTML : '');
-  if (log.innerHTML.length > 4000) log.innerHTML = log.innerHTML.slice(0, 4000);
+    const isIdle = binStr[6] === '1'; // Bit 2
+    const isLambda = binStr[1] === '1'; // Bit 7
+    document.getElementById('v-opstatus-text').textContent = isIdle ? 'Leerlauf' : 'Fahrt';
+    document.getElementById('lbl-b7').textContent = `B7: Lambda ${isLambda ? '✅' : '❌'}`;
+    document.getElementById('lbl-b2').textContent = `B2: Leerlauf ${isIdle ? '✅' : '❌'}`;
+  }
+
+  updateSmartFeedback(d);
+}
+
+// ── Smart Feedback Engine ──────────────────────────────────────────────────────
+function updateSmartFeedback(d) {
+  const banner = document.getElementById("smart-banner");
+  const bannerIcon = document.getElementById("banner-icon");
+  const bannerTitle = document.getElementById("banner-title");
+  const bannerDesc = document.getElementById("banner-desc");
+
+  const temp = d["Kühlmitteltemperatur"]?.value;
+  const rpm = d["Drehzahl"]?.value;
+  const inj = d["Einspritzzeit"]?.value;
+  const lambda = d["Lambda"]?.value;
+  const volt = d["Spannung"]?.value;
+  
+  let isIdle = false;
+  if (d["Betriebszustand"]) {
+      const binStr = d["Betriebszustand"].value.toString(2).padStart(8, '0');
+      isIdle = binStr[6] === '1'; // Bit 2
+  }
+
+  banner.className = "smart-banner";
+
+  // 1. Falschluft / Lambda Warnung (Highest Priority)
+  if (lambda && lambda > 1.10 && isIdle) {
+      banner.classList.add("danger");
+      bannerIcon.textContent = "⚠️";
+      bannerTitle.textContent = "Gemisch zu mager!";
+      bannerDesc.textContent = "Lambda > 1.10. Mögliches Falschluft-Leck (Vergaserflansch prüfen).";
+      return;
+  }
+
+  // 2. Batterie Warnung
+  if (volt && volt < 13.0 && rpm > 500) {
+      banner.classList.add("warning");
+      bannerIcon.textContent = "🔋";
+      bannerTitle.textContent = "Spannung niedrig";
+      bannerDesc.textContent = "Lichtmaschine lädt schwach (< 13V).";
+      return;
+  }
+
+  // 3. Coasting / Schubabschaltung
+  if (rpm > 1500 && isIdle && inj !== undefined && inj < 0.5) {
+      banner.classList.add("eco");
+      bannerIcon.textContent = "🍃";
+      bannerTitle.textContent = "Schubabschaltung aktiv";
+      bannerDesc.textContent = "0.0 L/100km - Sehr effizient!";
+      return;
+  }
+
+  // 4. Warm-Up Phase
+  if (temp !== undefined) {
+      if (temp < 60) {
+          banner.classList.add("cold");
+          bannerIcon.textContent = "❄️";
+          bannerTitle.textContent = "Motor kalt";
+          if (rpm > 3000) {
+              banner.classList.add("danger");
+              bannerDesc.textContent = "Drehzahl reduzieren! Motor schonen.";
+          } else {
+              bannerDesc.textContent = "Hohe Drehzahlen vermeiden.";
+          }
+      } else if (temp >= 60 && temp < 80) {
+          banner.classList.add("warm");
+          bannerIcon.textContent = "🌡️";
+          bannerTitle.textContent = "Wird warm";
+          bannerDesc.textContent = "Betriebstemperatur fast erreicht.";
+      } else {
+          banner.classList.add("hot");
+          bannerIcon.textContent = "✅";
+          bannerTitle.textContent = "Betriebswarm";
+          bannerDesc.textContent = "Volle Leistung verfügbar.";
+      }
+  }
+}
+
+// ── Faults API ─────────────────────────────────────────────────────────────────
+async function readFaults() {
+  const el = document.getElementById('fault-list');
+  el.innerHTML = '<div class="no-faults">Lese Fehler aus...</div>';
+  try {
+      const res = await fetch('/api/read-faults?ecu=engine', { method: 'POST' });
+      const data = await res.json();
+      
+      const now = new Date();
+      document.getElementById('last-fault-sync').textContent = `Zuletzt aktualisiert: ${now.toLocaleTimeString('de-DE')}`;
+      
+      if (data.ok) {
+          renderFaults(data.faults);
+      } else {
+          el.innerHTML = `<div class="no-faults" style="color:var(--red)">Fehler: ${data.error}</div>`;
+      }
+  } catch (e) {
+      el.innerHTML = `<div class="no-faults" style="color:var(--red)">Netzwerkfehler</div>`;
+  }
+}
+
+async function clearFaults() {
+  if(!confirm("Fehlerspeicher wirklich löschen?")) return;
+  try {
+      const res = await fetch('/api/clear-faults?ecu=engine', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+          readFaults();
+      } else {
+          alert("Löschen fehlgeschlagen: " + data.error);
+      }
+  } catch (e) {
+      alert("Netzwerkfehler");
+  }
 }
 
 function renderFaults(faults) {
   const el = document.getElementById('fault-list');
-  if (!faults.length) {
-    el.innerHTML = '<div class="no-faults">Kein Fehlerspeicher ✓</div>';
+  if (!faults || !faults.length) {
+    el.innerHTML = '<div class="no-faults" style="color:var(--green)">✓ Kein Fehler im Speicher abgelegt.</div>';
     return;
   }
   el.innerHTML = faults.map(f => `
@@ -322,13 +448,6 @@ function renderFaults(faults) {
         <div class="fault-status">${f.status}</div>
       </div>
     </div>`).join('');
-}
-
-async function clearFaults() {
-  const res = await fetch('/api/clear-faults', {method:'POST'});
-  const json = await res.json();
-  if (json.ok) renderFaults([]);
-  else alert('Fehler: ' + json.error);
 }
 
 // ── WebSocket ──────────────────────────────────────────────────────────────────
@@ -346,9 +465,13 @@ function connect() {
 
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'data') {
-      document.getElementById('ident-label').textContent = msg.ident || 'verbunden';
-      renderData(msg);
+    if (msg.type === 'data' && msg.engine) {
+      if (msg.engine.connected) {
+        document.getElementById('ident-label').textContent = msg.engine.ident;
+        renderData(msg.engine);
+      } else {
+        document.getElementById('ident-label').textContent = 'ECU Offline';
+      }
     } else if (msg.type === 'error') {
       document.getElementById('ident-label').textContent = '⚠ ' + msg.message;
     }

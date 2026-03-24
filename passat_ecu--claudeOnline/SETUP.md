@@ -153,6 +153,16 @@ sudo reboot
 # Safari → Teilen-Button → "Zum Home-Bildschirm"
 # → App startet im Vollbild, kein Browser-Chrome, fühlt sich nativ an
 
+# ── V2 Dashboard Features (Aktuell) ───────────────────────────────────────────
+# Das Dashboard wurde in Version 2 komplett überarbeitet:
+# - Smartphone-First: Optimiert für die Anzeige auf dem Handy (Safari/Chrome).
+# - Tabs: Aufteilung in `Antrieb` und `Fehler`.
+# - Smart Feedback: Ein intelligentes Banner ganz oben analysiert die Live-Daten 
+#   und gibt Tipps (z.B. "Motor kalt", "Schubabschaltung aktiv", "Falschluft-Warnung").
+# - Bitmasken-Anzeige: Der Betriebszustand (Leerlauf, Lambdaregelung) wird live visualisiert.
+# - Manueller Fehlerspeicher: Um das Live-Polling nicht zu stören (verhindert Ruckler), 
+#   wird der Fehlerspeicher nur noch auf Knopfdruck ("Auslesen") im Fehler-Tab geladen.
+
 # ── Troubleshooting ───────────────────────────────────────────────────────────
 # "Permission denied" auf /dev/ttyUSB0 → Gruppe dialout fehlt (s. Schritt 3)
 # ECU antwortet nicht → 5-Baud-Init braucht manchmal 2 Versuche (Zündung AUS/EIN)

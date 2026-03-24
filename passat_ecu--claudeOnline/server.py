@@ -45,18 +45,24 @@ class ECUState:
         self.error       = None
         self.tick        = 0
 
+class AppState:
+    def __init__(self):
+        self.engine = ECUState()
+        self.abs = ECUState() # Optional for later
+        self.global_tick = 0
 
-state = ECUState()
+state = AppState()
 clients: set[WebSocket] = set()
-ecu: Optional[KW1281] = None
+ecu_engine: Optional[KW1281] = None
+ecu_abs: Optional[KW1281] = None
 
 
 # ── ECU polling loop ───────────────────────────────────────────────────────────
 
 async def ecu_poll_loop():
-    global ecu
-    last_fault_read = 0
-
+    global ecu_engine
+    
+    # Wir pollen erstmal nur Engine, ABS kann später als zweiter Task dazu
     while True:
         try:
             if DEMO_MODE:
@@ -65,56 +71,47 @@ async def ecu_poll_loop():
                 continue
 
             # ── Verbinden ──────────────────────────────────────────────────────
-            if not state.connected:
-                log.info("Verbinde mit ECU...")
-                ecu = KW1281(SERIAL_PORT)
+            if not state.engine.connected:
+                log.info("Verbinde mit Engine ECU...")
+                ecu_engine = KW1281(SERIAL_PORT)
                 ident = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: ecu.connect(ECU_ENGINE)
+                    None, lambda: ecu_engine.connect(ECU_ENGINE)
                 )
-                state.ident = ident
-                state.connected = True
-                state.error = None
-                log.info(f"ECU verbunden: {ident}")
+                state.engine.ident = ident
+                state.engine.connected = True
+                state.engine.error = None
+                log.info(f"Engine ECU verbunden: {ident}")
 
             # ── Messwertblöcke lesen ───────────────────────────────────────────
+            # Für Mono-Motronic 1.8l ABS/ADZ sind Block 0, 1 und 2 relevant. 
+            # Block 0 liefert Rohdaten, Block 1 und 2 die umgerechneten Werte.
             data = {}
-            for block_num in [1, 2, 3]:
+            for block_num in [1, 2]:
                 group = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda b=block_num: ecu.read_measurement_block(b)
+                    None, lambda b=block_num: ecu_engine.read_measurement_block(b)
                 )
                 for label, value, unit in group.values:
                     data[label] = {"value": value, "unit": unit}
 
-            # ── Fehlerspeicher periodisch lesen ───────────────────────────────
-            now = time.time()
-            if now - last_fault_read > FAULT_INTERVAL:
-                faults = await asyncio.get_event_loop().run_in_executor(
-                    None, ecu.read_fault_codes
-                )
-                state.fault_codes = [
-                    {"code": f"P{f.code:04X}", "desc": f.description, "status": f.status}
-                    for f in faults
-                ]
-                last_fault_read = now
-
-            state.last_data = data
-            state.tick += 1
+            state.engine.last_data = data
+            state.engine.tick += 1
+            state.global_tick += 1
             await _broadcast()
 
         except KW1281Error as e:
-            log.warning(f"ECU Fehler: {e} — Neuverbindung in 3s")
-            state.connected = False
-            state.error = str(e)
-            if ecu:
-                try: ecu.disconnect()
+            log.warning(f"Engine ECU Fehler: {e} — Neuverbindung in 3s")
+            state.engine.connected = False
+            state.engine.error = str(e)
+            if ecu_engine:
+                try: ecu_engine.disconnect()
                 except: pass
-            await _broadcast_error(str(e))
+            await _broadcast_error(str(e), "engine")
             await asyncio.sleep(3)
 
         except Exception as e:
             log.error(f"Unerwarteter Fehler: {e}")
-            state.connected = False
-            state.error = str(e)
+            state.engine.connected = False
+            state.engine.error = str(e)
             await asyncio.sleep(5)
 
         await asyncio.sleep(POLL_INTERVAL)
@@ -123,39 +120,55 @@ async def ecu_poll_loop():
 async def _demo_tick():
     """Simulierte Daten für Entwicklung ohne KKL-Adapter."""
     import random, math
-    t = state.tick
-    state.tick += 1
+    t = state.global_tick
+    state.global_tick += 1
+    state.engine.tick += 1
 
     rpm_base = 820 + math.sin(t * 0.1) * 60
-    state.last_data = {
+    
+    # Simuliere Operating Status Bitmaske
+    # Bit 2 (Leerlauf) und Bit 7 (Lambda aktiv)
+    op_status = 0b01000010 if rpm_base < 1000 else 0b01000000
+    
+    state.engine.last_data = {
         "Drehzahl":              {"value": round(rpm_base + random.uniform(-30, 30)), "unit": "U/min"},
         "Kühlmitteltemperatur":  {"value": round(87 + random.uniform(-2, 2)),          "unit": "°C"},
         "Spannung":              {"value": round(13.8 + random.uniform(-0.2, 0.2), 1), "unit": "V"},
         "Lambda":                {"value": round(1.0 + random.uniform(-0.05, 0.05), 3),"unit": "λ"},
-        "Geschwindigkeit":       {"value": max(0, round(random.uniform(0, 15))),        "unit": "km/h"},
-        "Zündwinkel":            {"value": round(14 + random.uniform(-2, 2), 1),        "unit": "°KW"},
-        "Einspritzzeit":         {"value": round(3.2 + random.uniform(-0.3, 0.3), 2),  "unit": "ms"},
-        "Drosselklappe":         {"value": round(18 + random.uniform(-5, 5), 1),        "unit": "%"},
-        "Ansauglufttemperatur":  {"value": round(22 + random.uniform(-1, 1)),           "unit": "°C"},
+        "Einspritzzeit":         {"value": round(1.2 + random.uniform(-0.1, 0.1), 2) if rpm_base < 1000 else 2.5,  "unit": "ms"},
+        "Ansauglufttemperatur":  {"value": round(32 + random.uniform(-1, 1)),           "unit": "°C"},
+        "Betriebszustand":       {"value": op_status, "unit": "bit"},
     }
-    state.connected = True
-    state.ident = "DEMO · 1HM 906 258 · 0001"
-    if not state.fault_codes:
-        state.fault_codes = [
+    state.engine.connected = True
+    state.engine.ident = "DEMO · 8A0 907 311 K · 0001"
+    
+    if not state.engine.fault_codes:
+        state.engine.fault_codes = [
             {"code": "P0130", "desc": "Lambdasonde — Signal außerhalb Bereich", "status": "gespeichert"},
         ]
+        
     await _broadcast()
 
 
 async def _broadcast():
     msg = json.dumps({
         "type":    "data",
-        "tick":    state.tick,
+        "tick":    state.global_tick,
         "ts":      datetime.now().isoformat(),
-        "connected": state.connected,
-        "ident":   state.ident,
-        "data":    state.last_data,
-        "faults":  state.fault_codes,
+        "engine": {
+            "connected": state.engine.connected,
+            "ident":   state.engine.ident,
+            "data":    state.engine.last_data,
+            "faults":  state.engine.fault_codes,
+            "tick":    state.engine.tick
+        },
+        "abs": {
+            "connected": state.abs.connected,
+            "ident":   state.abs.ident,
+            "data":    state.abs.last_data,
+            "faults":  state.abs.fault_codes,
+            "tick":    state.abs.tick
+        }
     })
     dead = set()
     for ws in clients:
@@ -166,8 +179,8 @@ async def _broadcast():
     clients.difference_update(dead)
 
 
-async def _broadcast_error(msg: str):
-    payload = json.dumps({"type": "error", "message": msg})
+async def _broadcast_error(msg: str, ecu_type: str = "engine"):
+    payload = json.dumps({"type": "error", "ecu": ecu_type, "message": msg})
     dead = set()
     for ws in clients:
         try:
@@ -183,8 +196,11 @@ async def _broadcast_error(msg: str):
 async def lifespan(app: FastAPI):
     asyncio.create_task(ecu_poll_loop())
     yield
-    if ecu:
-        try: ecu.disconnect()
+    if ecu_engine:
+        try: ecu_engine.disconnect()
+        except: pass
+    if ecu_abs:
+        try: ecu_abs.disconnect()
         except: pass
 
 app = FastAPI(title="Passat B4 ECU Dashboard", lifespan=lifespan)
@@ -197,7 +213,7 @@ async def websocket_endpoint(ws: WebSocket):
     log.info(f"Client verbunden: {ws.client}")
     try:
         # Sofort aktuellen Stand senden
-        if state.last_data:
+        if state.engine.last_data or state.abs.last_data:
             await _broadcast()
         while True:
             # Ping-Pong halten die Verbindung offen
@@ -211,21 +227,54 @@ async def websocket_endpoint(ws: WebSocket):
 @app.get("/api/status")
 def api_status():
     return {
-        "connected": state.connected,
-        "ident":     state.ident,
-        "tick":      state.tick,
-        "error":     state.error,
-        "clients":   len(clients),
+        "engine_connected": state.engine.connected,
+        "engine_ident":     state.engine.ident,
+        "global_tick":      state.global_tick,
+        "clients":          len(clients),
     }
 
 
-@app.post("/api/clear-faults")
-async def clear_faults():
-    if not state.connected or not ecu:
-        return {"ok": False, "error": "ECU nicht verbunden"}
+@app.post("/api/read-faults")
+async def read_faults(ecu: str = "engine"):
+    """Manuelles Auslesen des Fehlerspeichers (verhindert UI-Lag beim normalen Polling)"""
+    target_ecu = ecu_engine if ecu == "engine" else ecu_abs
+    target_state = state.engine if ecu == "engine" else state.abs
+    
+    if not target_state.connected or not target_ecu:
+        return {"ok": False, "error": f"ECU '{ecu}' nicht verbunden"}
+        
+    if DEMO_MODE:
+        return {"ok": True, "faults": target_state.fault_codes}
+        
     try:
-        await asyncio.get_event_loop().run_in_executor(None, ecu.clear_fault_codes)
-        state.fault_codes = []
+        faults = await asyncio.get_event_loop().run_in_executor(None, target_ecu.read_fault_codes)
+        target_state.fault_codes = [
+            {"code": f"P{f.code:04X}", "desc": f.description, "status": f.status}
+            for f in faults
+        ]
+        await _broadcast()
+        return {"ok": True, "faults": target_state.fault_codes}
+    except KW1281Error as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/clear-faults")
+async def clear_faults(ecu: str = "engine"):
+    target_ecu = ecu_engine if ecu == "engine" else ecu_abs
+    target_state = state.engine if ecu == "engine" else state.abs
+    
+    if not target_state.connected or not target_ecu:
+        return {"ok": False, "error": f"ECU '{ecu}' nicht verbunden"}
+        
+    if DEMO_MODE:
+        target_state.fault_codes = []
+        await _broadcast()
+        return {"ok": True}
+        
+    try:
+        await asyncio.get_event_loop().run_in_executor(None, target_ecu.clear_fault_codes)
+        target_state.fault_codes = []
+        await _broadcast()
         return {"ok": True}
     except KW1281Error as e:
         return {"ok": False, "error": str(e)}

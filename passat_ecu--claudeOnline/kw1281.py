@@ -308,6 +308,8 @@ def _decode_measurement_values(data: list[int]) -> list[tuple]:
                 results.append(("Luftmasse", round(value_b * 0.01, 3), "g/s"))
             case 0x0F:  # Ansauglufttemperatur: value - 40
                 results.append(("Ansauglufttemperatur", value_b - 40, "°C"))
+            case 0x12:  # Betriebszustand (8-bit)
+                results.append(("Betriebszustand", value_b, "bit"))
             case _:
                 results.append((f"Kanal_0x{type_b:02X}", value_b, "raw"))
 

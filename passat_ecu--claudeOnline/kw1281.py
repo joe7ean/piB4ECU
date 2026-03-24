@@ -76,13 +76,15 @@ class KW1281:
         Returns ECU identification string.
         """
         self._ecu_addr = ecu_addr
-        log.info(f"Connecting to ECU 0x{ecu_addr:02X} on {self.port}")
+        
+        # WIR WISSEN JETZT: Das Steuergerät sendet mit 4800 Baud!
+        baudrate = 4800
+        log.info(f"Connecting to ECU 0x{ecu_addr:02X} on {self.port} at {baudrate} baud")
 
-        # Open port at 10400 baud for normal comms
-        # but we need to send the address at 5 baud manually
+        # Open port for normal comms
         self.ser = serial.Serial(
             port=self.port,
-            baudrate=10400,
+            baudrate=baudrate,
             bytesize=serial.EIGHTBITS,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
@@ -91,22 +93,37 @@ class KW1281:
         self.ser.close()
 
         # ── 5-baud init: send ECU address bit by bit ──────────────────────────
-        # We do this by manually toggling the TXD line via break conditions
         self.ser.open()
-        self.ser.break_condition = True   # line low = start bit
+        
+        # WICHTIG: Vor der 5-Baud Init muss die K-Line für mind. 2 Sekunden HIGH sein (Idle)
+        self.ser.break_condition = False
+        time.sleep(2.5) # Etwas länger warten, um sicherzugehen
+        
+        # Start bit (LOW)
+        self.ser.break_condition = True   
         time.sleep(0.2)                   # 200ms = 1 bit at 5 baud
 
+        # LSB first
         for i in range(8):
             bit = (ecu_addr >> i) & 1
             self.ser.break_condition = not bool(bit)
             time.sleep(0.2)
 
-        self.ser.break_condition = False  # stop bit high
+        # Stop bit (HIGH)
+        self.ser.break_condition = False  
+        
+        # WICHTIG: Empfangspuffer leeren, BEVOR wir die 200ms für das Stop-Bit warten!
+        # Wenn das Steuergerät sehr schnell antwortet, sendet es das Sync-Byte vielleicht
+        # schon während dieser 200ms. Wenn wir danach leeren, löschen wir das Sync-Byte.
+        self.ser.reset_input_buffer()
+        
         time.sleep(0.2)
 
         # ── Read sync byte 0x55, then KB1, KB2, then inverted addr ───────────
         sync = self._read_byte(timeout=3.0)
+        
         if sync != 0x55:
+            self.ser.close()
             raise KW1281Error(f"Kein Sync-Byte (got 0x{sync:02X}, expected 0x55)")
 
         kb1 = self._read_byte()
@@ -181,6 +198,12 @@ class KW1281:
     def _send_byte(self, byte: int):
         self.ser.write(bytes([byte & 0xFF]))
         self.ser.flush()
+        
+        # K-Line Adapter empfangen alles, was sie selbst senden (Lokales Echo).
+        # Wir müssen dieses Echo auslesen und verwerfen, sonst stört es den nächsten Lesezugriff!
+        echo = self.ser.read(1)
+        if not echo:
+            log.warning("Kein lokales Echo empfangen - Kabel defekt oder nicht eingesteckt?")
 
     def _read_byte(self, timeout: float = None) -> int:
         if timeout:

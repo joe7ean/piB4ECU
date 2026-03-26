@@ -19,8 +19,13 @@ python app/server.py
 
 Danach im Browser:
 
-- `http://localhost:8000` (lokal)
-- `http://<raspi-ip>:8000` (im Netzwerk)
+- `http://localhost` (lokal)
+- `http://<raspi-ip>` (im Netzwerk)
+
+Optional anderer Port:
+
+- setze `ECU_HTTP_PORT=<port>`
+- bei systemd fuer User `pi` zusaetzlich `AmbientCapabilities=CAP_NET_BIND_SERVICE`
 
 ## Wichtige Dateien
 

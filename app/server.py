@@ -35,6 +35,7 @@ DEMO_MODE        = False            # True = simulierte Daten, kein KKL nötig
 # KW1281-Handshake: mehrere Versuche; optionales Diagnose-Log via ENV
 ECU_CONNECT_ATTEMPTS = int(os.environ.get("ECU_CONNECT_ATTEMPTS", "10"))
 ECU_DIAG_LOG = os.environ.get("ECU_DIAG_LOG")
+ECU_HTTP_PORT = int(os.environ.get("ECU_HTTP_PORT", "80"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -496,7 +497,7 @@ async def clear_faults(ecu: str = "engine"):
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     """Liefert das Dashboard — öffne auf iPhone in Safari."""
-    with open("dashboard.html", "r") as f:
+    with (_BASE_DIR / "dashboard.html").open("r", encoding="utf-8") as f:
         return f.read()
 
 
@@ -504,7 +505,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "server:app",
         host="0.0.0.0",   # erreichbar im lokalen WLAN
-        port=8000,
+        port=ECU_HTTP_PORT,
         log_level="info",
         reload=False,
     )

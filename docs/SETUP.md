@@ -1,43 +1,84 @@
-# ══════════════════════════════════════════════════════════════════════════════
-# Passat B4 ECU Dashboard — Setup für Raspberry Pi Zero 2W
-# ══════════════════════════════════════════════════════════════════════════════
+# Passat B4 ECU Dashboard - Setup (Raspberry Pi Zero 2W)
 
-# ── 1. Raspi vorbereiten ───────────────────────────────────────────────────────
+Diese Anleitung richtet das Projekt auf einem Raspberry Pi mit Standard-Port `80` ein.
 
-# Raspberry Pi OS Lite installieren (64-bit, Bookworm)
-# SSH aktivieren, WLAN konfigurieren — via raspi-config oder direkt in /boot
+## Voraussetzungen
 
-# ── 2. Abhängigkeiten installieren ────────────────────────────────────────────
+- Raspberry Pi OS Lite (Bookworm, 64-bit)
+- SSH/WLAN konfiguriert
+- KKL-Adapter angeschlossen (typisch `/dev/ttyUSB0`)
 
-sudo apt update && sudo apt install -y python3-pip python3-venv
+## 1) System vorbereiten
 
-# Projekt klonen
+```bash
+sudo apt update
+sudo apt install -y python3-pip python3-venv
+```
+
+## 2) Projekt installieren
+
+```bash
 git clone https://github.com/joe7ean/piB4ECU.git
 cd ~/piB4ECU
 
-# Virtualenv anlegen
 python3 -m venv .venv
 source .venv/bin/activate
-
 pip install -r requirements.txt
+```
 
-# ── 3. USB-Serial Rechte ──────────────────────────────────────────────────────
+## 3) Serial-Rechte setzen
 
+```bash
 sudo usermod -a -G dialout $USER
-# danach einmal ausloggen/einloggen, damit die Gruppe greift
+```
 
-# Port prüfen (KKL Adapter einstecken, dann):
-ls /dev/ttyUSB*   # sollte /dev/ttyUSB0 zeigen
+Danach einmal ab- und wieder anmelden (oder reboot), damit die Gruppe aktiv ist.
 
-# ── 4. Demo-Modus testen (ohne KKL-Adapter) ───────────────────────────────────
+Port prüfen:
 
-# In app/server.py: DEMO_MODE = True setzen
+```bash
+ls /dev/ttyUSB*
+```
+
+## 4) Lokal testen (ohne systemd)
+
+```bash
+source .venv/bin/activate
 python app/server.py
-# Browser: http://localhost:8000
+```
 
-# ── 5. Autostart via systemd ──────────────────────────────────────────────────
+Aufruf:
 
-# Service-Datei anlegen:
+- `http://localhost`
+- `http://<raspi-ip>`
+
+## 5) Vor Hotspot: ECU-Verbindung gezielt mit `ecu_trace.py` pruefen
+
+Empfohlene Reihenfolge fuer ein stabiles Setup:
+
+1. Erst mit Rechner/Raspi direkt per OBD/KKL-Kabel testen
+2. Dann Webserver lokal pruefen
+3. Erst danach Hotspot und Autobetrieb aktivieren
+
+So trennst du Kommunikationsprobleme (K-Line/ECU) sauber von Netzwerk-/Hotspot-Themen.
+
+```bash
+source .venv/bin/activate
+python app/ecu_trace.py --port /dev/ttyUSB0 --baud 4800 --attempts 10
+python app/ecu_trace.py --measure 1 --attempts 3
+```
+
+Hinweis fuer andere Motor-/Steuergeraetevarianten:
+
+- `ecu_trace.py` ist ideal, um Handshake und Messwertblock-Lesen isoliert zu validieren.
+- Wenn dein Steuergeraet nicht auf Standardwerte reagiert, zuerst hier debuggen (Port, Baud, Timing, Versuche).
+- Fuer abweichende ECU-Adressen/Blockinhalte kannst du danach gezielt `app/kw1281.py` bzw. die Adresse in `app/ecu_trace.py` anpassen.
+
+## 6) Autostart mit systemd (Port 80)
+
+Service-Datei erstellen:
+
+```bash
 sudo tee /etc/systemd/system/passat-ecu.service > /dev/null << 'EOF'
 [Unit]
 Description=Passat B4 ECU Dashboard
@@ -47,6 +88,8 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/piB4ECU
+Environment=ECU_HTTP_PORT=80
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 ExecStart=/home/pi/piB4ECU/.venv/bin/python app/server.py
 Restart=always
 RestartSec=5
@@ -56,126 +99,34 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
+```
 
+Aktivieren und starten:
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable passat-ecu
 sudo systemctl start passat-ecu
+```
 
-# Status prüfen:
+Status/Logs:
+
+```bash
 sudo systemctl status passat-ecu
-journalctl -u passat-ecu -f   # Live-Log
+journalctl -u passat-ecu -f
+```
 
-# ── 6. iPhone verbinden ───────────────────────────────────────────────────────
+## 7) Zugriff vom Handy
 
-# Option A — Heimnetz (Raspi + iPhone im selben WLAN)
-# IP des Raspi herausfinden:
-hostname -I
-# Safari auf iPhone: http://192.168.x.x:8000
-# → Als "Zum Home-Bildschirm" speichern → verhält sich wie eine native App!
+- Im selben Netzwerk: `http://<raspi-ip>`
+- Optional als PWA speichern: Safari -> Teilen -> "Zum Home-Bildschirm"
 
-# Option B — Raspi als Hotspot (kein Router nötig, ideal im Auto)
-#
-# Ziel: Der Raspi (passatpi) sendet sein eigenes WLAN, während dein KKL/K-Line Adapter
-# am Raspi über USB/Serial hängt. Das Dashboard ist dann im Auto unter
-# `http://192.168.4.1:8000` erreichbar.
-#
-# Wichtiger Hinweis:
-# - Nach Aktivierung des Hotspots kann die Heimnetz-SSH-Verbindung brechen.
-#   Das ist erwartbar.
-# - Wenn du dich ausgesperrt fühlst: Recovery unten nutzen.
+## 8) Hotspot-Betrieb im Auto
 
-# 6.1 WLAN-Interface automatisch bestimmen (statt hardcoded wlan0)
-sudo apt install -y iw >/dev/null
-WIFI_IFACE="$(iw dev | awk '$1=="Interface"{print $2; exit}')"
-echo "Hotspot uses interface: ${WIFI_IFACE}"
+Die Hotspot-Einrichtung ist in `docs/HOTSPOT.md` beschrieben.
 
-# 6.2 Pakete installieren
-sudo apt install -y hostapd dnsmasq
+## Troubleshooting
 
-# 6.3 hostapd konfigurieren
-sudo tee /etc/hostapd/hostapd.conf > /dev/null <<EOF
-interface=${WIFI_IFACE}
-ssid=PassatECU
-hw_mode=g
-channel=6
-wpa=2
-wpa_passphrase=passat1994
-wpa_key_mgmt=WPA-PSK
-wpa_pairwise=CCMP
-EOF
-
-# 6.4 dnsmasq konfigurieren (DHCP für Clients im Auto)
-sudo tee -a /etc/dnsmasq.conf > /dev/null <<EOF
-interface=${WIFI_IFACE}
-dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
-EOF
-
-# 6.5 Statische Hotspot-IP (Gateway) per systemd oneshot setzen
-# Hintergrund: In deinem Setup ist `dhcpcd` inaktiv, deshalb verwenden wir nicht /etc/dhcpcd.conf.
-sudo tee /etc/systemd/system/passatpi-hotspot-ip.service > /dev/null <<EOF
-[Unit]
-Description=Set static IP for PassatECU hotspot (${WIFI_IFACE})
-After=hostapd.service
-Wants=hostapd.service
-
-[Service]
-Type=oneshot
-ExecStart=/sbin/ip addr replace 192.168.4.1/24 dev ${WIFI_IFACE}
-ExecStartPost=/bin/systemctl restart dnsmasq
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable passatpi-hotspot-ip
-
-# 6.6 Client-WLAN dauerhaft deaktivieren (damit Heimnetz nicht automatisch „greift“)
-sudo systemctl disable --now NetworkManager 2>/dev/null || true
-sudo systemctl disable --now "wpa_supplicant@${WIFI_IFACE}.service" 2>/dev/null || true
-
-# 6.7 Dienste aktivieren + reboot
-sudo systemctl unmask hostapd
-sudo systemctl enable hostapd dnsmasq
-sudo reboot
-
-# Nach Reboot:
-# - iPhone/Handy verbindet sich mit WLAN "PassatECU"
-# - Dashboard: http://192.168.4.1:8000
-
-# Recovery (falls Hotspot nicht geht):
-# - SSH notfalls über lokalen Zugriff/SD-Card/Keyboard herstellen
-# - Dann:
-#   sudo systemctl disable --now hostapd dnsmasq
-#   sudo systemctl reboot
-
-# ── 7. Als PWA zum iPhone-Homescreen hinzufügen ───────────────────────────────
-# Safari → Teilen-Button → "Zum Home-Bildschirm"
-# → App startet im Vollbild, kein Browser-Chrome, fühlt sich nativ an
-
-# ── V2 Dashboard Features (Aktuell) ───────────────────────────────────────────
-# Das Dashboard wurde in Version 2 komplett überarbeitet:
-# - Smartphone-First: Optimiert für die Anzeige auf dem Handy (Safari/Chrome).
-# - Tabs: Aufteilung in `Antrieb`, `Trip` und `Fehler`.
-# - Smart Feedback: Ein intelligentes Banner ganz oben analysiert die Live-Daten 
-#   und gibt Tipps (z.B. "Motor kalt", "Schubabschaltung aktiv", "Falschluft-Warnung").
-# - Bitmasken-Anzeige: Der Betriebszustand (Leerlauf, Lambdaregelung) wird live visualisiert.
-# - Manueller Fehlerspeicher: Um das Live-Polling nicht zu stören (verhindert Ruckler), 
-#   wird der Fehlerspeicher nur noch auf Knopfdruck ("Auslesen") im Fehler-Tab geladen.
-# - GPS/Speed-Quelle: Auf der Antriebsseite wird GPS-km/h angezeigt; die Quelle (ECU/GPS/N/A)
-#   ist transparent sichtbar.
-# - Trip-Rechner (geschätzt): Der Trip-Tab zeigt Live-Verbrauch und Durchschnittswerte.
-#   Alle Verbrauchswerte sind modellbasiert geschätzt (keine geeichte Werksmessung).
-# - Theme-Toggle: Umschalter oben rechts (Tag/Nacht), Zustand bleibt im Browser gespeichert.
-# - Trip-KM Korrektur: Im Trip-Tab kann die gefahrene Strecke manuell gesetzt werden
-#   (z. B. per Tageskilometerzähler), dadurch wird vor allem `Ø L/100` realistischer.
-# - V3.1 Tank-Kalibrierung (optional):
-#   - `Getankte Liter` eintragen (nach Volltanken) für sanftes Nachlernen des Modells.
-#   - `Tank +/-` als manueller Abgleich der Füllstandsschätzung.
-#   - Ohne Eingaben bleibt alles im Standardmodus mit stabilem Basisfaktor.
-
-# ── Troubleshooting ───────────────────────────────────────────────────────────
-# "Permission denied" auf /dev/ttyUSB0 → Gruppe dialout fehlt (s. Schritt 3)
-# ECU antwortet nicht → 5-Baud-Init braucht manchmal 2 Versuche (Zündung AUS/EIN)
-# Kein /dev/ttyUSB0 → anderes Kabel, oder CP2102-Chip-Treiber fehlt
+- `Permission denied` auf `/dev/ttyUSB0`: Benutzer noch nicht in `dialout` aktiv
+- ECU antwortet nicht: Zündung/5-Baud-Init prüfen, ggf. erneut versuchen
+- Kein `/dev/ttyUSB0`: Adapter/Kabel/Chip-Treiber prüfen

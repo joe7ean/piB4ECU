@@ -39,8 +39,14 @@ Optional anderer Port:
 - `docs/SETUP.md` - Raspberry-Pi Setup inkl. systemd Service
 - `docs/HOTSPOT.md` - Hotspot-Betrieb im Auto
 - `docs/MEASURING_BLOCKS.md` - Dokumentierte Messwertbloecke
+- `CHANGELOG.md` - Aenderungshistorie und Releases
+
+## Release Status
+
+Aktueller Release-Kanal: `v1.0.0-alpha.1` (Pre-Release)
 
 ## Hinweise fuer Veroeffentlichung
 
 - Laufzeit- und lokale Dateien sind per `.gitignore` ausgeschlossen (`.venv`, `__pycache__`, `.cursor`).
 - Optionale Ideen/Notizen bleiben in `ideas.md` lokal und untracked.
+- Lizenz: `MIT` (siehe `LICENSE`)

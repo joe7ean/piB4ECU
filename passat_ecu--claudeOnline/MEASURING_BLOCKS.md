@@ -8,6 +8,29 @@ Zudem enthält es Konzepte, wie diese Daten in Zukunft für ein dynamisches Live
 
 ## 1. Detaillierte Aufschlüsselung der Messwertblöcke
 
+### Decoder-Mapping (validiert gegen CarPort)
+Für dieses Projekt werden die Antworten auf `0x29` (GroupRead) als `0xE7`-Block dekodiert.
+Die Nutzdaten sind dabei als Triplets kodiert:
+
+`[meaning, a, b, meaning, a, b, ...]`
+
+Folgende `meaning`-IDs und Formeln sind für den Passat B4 (8A0 907 311 K) verifiziert:
+
+| meaning | Formel | Einheit | Anzeige |
+|---------|--------|---------|---------|
+| `0x01` | `a * 0.2 * b` | U/min | Drehzahl |
+| `0x05` | `0.1*a*b - 10*a` | °C | Block 001: Kühlmitteltemperatur, Block 002: Abgasrückführung |
+| `0x0B` | `0.0001*a*(b-128)+1` | lambda | Lambda |
+| `0x10` | `b` | bitmask | Betriebszustand |
+| `0x0F` | `0.01*a*b` | ms | Einspritzzeit |
+| `0x06` | `0.001*a*b` | V | Bordspannung |
+
+Diese Zuordnung wurde mit mehreren Zuständen validiert:
+- Motor aus (nur Zündung): RPM 0, Bordspannung ~12.7 V
+- Idle: RPM ~920, Bordspannung ~14.0 V
+- Idle + Licht: RPM ~920, Bordspannung ~13.7 V
+- ~2000 RPM: RPM ~2000, Bordspannung ~13.7 V
+
 ### Messwertblock 000: Rohdaten (ADC-Werte)
 Block 000 liefert keine physikalischen Einheiten (wie °C oder U/min), sondern direkte 8-Bit-Rohwerte (0-255) des Analog-Digital-Wandlers (ADC) im Steuergerät. 
 

@@ -156,12 +156,19 @@ sudo reboot
 # ── V2 Dashboard Features (Aktuell) ───────────────────────────────────────────
 # Das Dashboard wurde in Version 2 komplett überarbeitet:
 # - Smartphone-First: Optimiert für die Anzeige auf dem Handy (Safari/Chrome).
-# - Tabs: Aufteilung in `Antrieb` und `Fehler`.
+# - Tabs: Aufteilung in `Antrieb`, `Trip` und `Fehler`.
 # - Smart Feedback: Ein intelligentes Banner ganz oben analysiert die Live-Daten 
 #   und gibt Tipps (z.B. "Motor kalt", "Schubabschaltung aktiv", "Falschluft-Warnung").
 # - Bitmasken-Anzeige: Der Betriebszustand (Leerlauf, Lambdaregelung) wird live visualisiert.
 # - Manueller Fehlerspeicher: Um das Live-Polling nicht zu stören (verhindert Ruckler), 
 #   wird der Fehlerspeicher nur noch auf Knopfdruck ("Auslesen") im Fehler-Tab geladen.
+# - GPS/Speed-Quelle: Auf der Antriebsseite wird GPS-km/h angezeigt; die Quelle (ECU/GPS/N/A)
+#   ist transparent sichtbar.
+# - Trip-Rechner (geschätzt): Der Trip-Tab zeigt Live-Verbrauch und Durchschnittswerte.
+#   Alle Verbrauchswerte sind modellbasiert geschätzt (keine geeichte Werksmessung).
+# - Theme-Toggle: Umschalter oben rechts (Tag/Nacht), Zustand bleibt im Browser gespeichert.
+# - Trip-KM Korrektur: Im Trip-Tab kann die gefahrene Strecke manuell gesetzt werden
+#   (z. B. per Tageskilometerzähler), dadurch wird vor allem `Ø L/100` realistischer.
 
 # ── Troubleshooting ───────────────────────────────────────────────────────────
 # "Permission denied" auf /dev/ttyUSB0 → Gruppe dialout fehlt (s. Schritt 3)

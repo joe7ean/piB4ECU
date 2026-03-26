@@ -22,6 +22,16 @@
     --radius: 14px;
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bot: env(safe-area-inset-bottom, 0px);
+    --header-bg: rgba(15,15,15,0.85);
+  }
+  body.theme-light {
+    --bg: #f4f6f8;
+    --bg2: #ffffff;
+    --bg3: #e8edf3;
+    --border: rgba(0,0,0,0.1);
+    --text: #1b1d20;
+    --muted: #5d636b;
+    --header-bg: rgba(244,246,248,0.86);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; overflow-x: hidden; }
@@ -30,7 +40,7 @@
   .header {
     position: sticky; top: 0; z-index: 10;
     padding: calc(var(--safe-top) + 12px) 16px 12px;
-    background: rgba(15,15,15,0.85);
+    background: var(--header-bg);
     backdrop-filter: blur(16px);
     display: flex; justify-content: space-between; align-items: center;
     border-bottom: 1px solid var(--border);
@@ -39,6 +49,16 @@
   .header-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .status-dot   { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background .4s; }
   .status-dot.live { background: var(--green); animation: pulse 2s infinite; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .theme-toggle {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg2);
+    color: var(--text);
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
   /* ── Tabs ── */
@@ -151,6 +171,15 @@
 
   /* ── Section label ── */
   .section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 8px; }
+  .input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 14px;
+  }
 </style>
 </head>
 <body>
@@ -162,12 +191,16 @@
     <div class="header-title">Passat B4</div>
     <div class="header-sub" id="ident-label">Verbinde…</div>
   </div>
-  <div class="status-dot" id="status-dot"></div>
+  <div class="header-right">
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌙 Nacht</button>
+    <div class="status-dot" id="status-dot"></div>
+  </div>
 </div>
 
 <div class="tabs">
-  <button class="tab active" onclick="showTab('drive')">Antrieb</button>
-  <button class="tab"        onclick="showTab('faults')">Fehler</button>
+  <button class="tab active" onclick="showTab('drive', this)">Antrieb</button>
+  <button class="tab"        onclick="showTab('trip', this)">Trip</button>
+  <button class="tab"        onclick="showTab('faults', this)">Fehler</button>
 </div>
 
 <!-- ── ANTRIEB ── -->
@@ -207,9 +240,15 @@
     <div class="mini-card"><div class="mini-val" id="v-voltage">—</div><div class="mini-lbl">Batterie V</div></div>
   </div>
   
-  <div class="grid2">
+  <div class="grid3">
     <div class="mini-card"><div class="mini-val" id="v-airtemp">—</div><div class="mini-lbl">Ansaugluft °C</div></div>
     <div class="mini-card"><div class="mini-val" id="v-timing">—</div><div class="mini-lbl">Zündwinkel °</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-egr">—</div><div class="mini-lbl">Abgasrückführung °C</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="mini-card"><div class="mini-val" id="v-gpsspeed">—</div><div class="mini-lbl">GPS km/h</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-speedsource">—</div><div class="mini-lbl" id="v-gpsstate">GPS Status: N/A</div></div>
   </div>
 
   <div class="card" style="margin-top: 10px;">
@@ -227,6 +266,40 @@
       <span id="lbl-b2">B2: Leerlauf</span>
     </div>
   </div>
+</div>
+
+<!-- ── TRIP ── -->
+<div class="content" id="tab-trip">
+  <div class="section-label">Verbrauch (geschätzt)</div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-label">Live Verbrauch</div>
+      <div><span class="card-value" id="v-trip-live-cons">—</span><span class="card-unit" id="v-trip-live-unit">L/100km</span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Live L/h</div>
+      <div><span class="card-value" id="v-trip-live-lph">—</span><span class="card-unit">L/h</span></div>
+    </div>
+  </div>
+
+  <div class="section-label">Trip seit Start</div>
+  <div class="grid3">
+    <div class="mini-card"><div class="mini-val" id="v-trip-distance">—</div><div class="mini-lbl">Strecke km</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-trip-time">—</div><div class="mini-lbl">Fahrzeit</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-trip-avg-speed">—</div><div class="mini-lbl">Ø km/h</div></div>
+  </div>
+  <div class="grid2">
+    <div class="mini-card"><div class="mini-val" id="v-trip-avg-cons">—</div><div class="mini-lbl">Ø L/100 km</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-trip-fuel">—</div><div class="mini-lbl">Kraftstoff L</div></div>
+  </div>
+  <div class="section-label">Trip-KM manuell korrigieren (letzte Fahrt)</div>
+  <div class="grid2">
+    <input class="input" id="trip-distance-input" type="number" min="0" step="0.1" placeholder="z. B. 42.6">
+    <button class="btn" style="margin-top: 0;" onclick="applyTripDistance()">KM übernehmen</button>
+  </div>
+
+  <button class="btn btn-primary" onclick="resetTrip()">Trip zurücksetzen</button>
+  <div class="section-label">Hinweis: Alle Verbrauchswerte sind modellbasiert geschätzt.</div>
 </div>
 
 <!-- ── FEHLERCODES ── -->
@@ -264,11 +337,11 @@ function sparkPoints(key, w=200, h=40) {
 }
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-function showTab(id) {
+function showTab(id, btn) {
   document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
-  event.target.classList.add('active');
+  if (btn) btn.classList.add('active');
 }
 
 // ── Data rendering ─────────────────────────────────────────────────────────────
@@ -294,6 +367,8 @@ function renderData(data) {
   set('inj',     get('Einspritzzeit'), 2);
   set('voltage', get('Spannung'),      1);
   set('airtemp', get('Ansauglufttemperatur'), 0);
+  set('egr',     get('Abgasrückführung'), 1);
+  set('gpsspeed', gpsSpeedKmh, 1);
 
   // Update sparklines
   const sparks = {rpm:'rpm', coolant:'coolant'};
@@ -322,6 +397,52 @@ function renderData(data) {
   }
 
   updateSmartFeedback(d);
+}
+
+function fmtDuration(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined) return '—';
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
+function renderTrip(trip) {
+  if (!trip) return;
+  const speedSource = trip.speed_source || 'N/A';
+  set('speedsource', speedSource);
+
+  const liveL100 = trip.live_l_per_100km;
+  const liveLph = trip.live_lph;
+  const speed = trip.speed_kmh;
+  const isStand = speed === null || speed === undefined || speed < 3;
+  document.getElementById('v-trip-live-unit').textContent = isStand ? 'L/h' : 'L/100km';
+  set('trip-live-cons', isStand ? liveLph : liveL100, 2);
+  set('trip-live-lph', liveLph, 2);
+
+  set('trip-distance', trip.distance_km, 2);
+  document.getElementById('v-trip-time').textContent = fmtDuration(trip.drive_time_s);
+  set('trip-avg-speed', trip.avg_speed_kmh, 1);
+  set('trip-avg-cons', trip.avg_l_per_100km, 2);
+  set('trip-fuel', trip.fuel_l, 2);
+  const input = document.getElementById('trip-distance-input');
+  if (input && document.activeElement !== input && typeof trip.distance_km === 'number') {
+    input.value = trip.distance_km.toFixed(1);
+  }
+}
+
+function applyTheme(mode) {
+  const isLight = mode === 'light';
+  document.body.classList.toggle('theme-light', isLight);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = isLight ? '☀️ Tag' : '🌙 Nacht';
+  localStorage.setItem('dash-theme', isLight ? 'light' : 'dark');
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.contains('theme-light');
+  applyTheme(isLight ? 'dark' : 'light');
 }
 
 // ── Smart Feedback Engine ──────────────────────────────────────────────────────
@@ -452,6 +573,83 @@ function renderFaults(faults) {
 
 // ── WebSocket ──────────────────────────────────────────────────────────────────
 let ws, reconnectTimer;
+let gpsWatchId = null;
+let gpsSpeedKmh = null;
+let gpsStatus = 'N/A';
+
+async function postGpsSpeed(speedKmh) {
+  try {
+    await fetch('/api/gps-speed', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({speed_kmh: speedKmh}),
+    });
+  } catch (_) {}
+}
+
+function startGpsWatch() {
+  if (!('geolocation' in navigator)) {
+    gpsStatus = 'Nicht verfügbar';
+    document.getElementById('v-gpsstate').textContent = `GPS Status: ${gpsStatus}`;
+    return;
+  }
+  if (gpsWatchId !== null) return;
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const mps = pos.coords.speed;
+      if (typeof mps === 'number' && !Number.isNaN(mps) && mps >= 0) {
+        gpsSpeedKmh = mps * 3.6;
+        gpsStatus = 'Aktiv';
+      } else {
+        gpsSpeedKmh = null;
+        gpsStatus = 'Aktiv (ohne Speed)';
+      }
+      set('gpsspeed', gpsSpeedKmh, 1);
+      document.getElementById('v-gpsstate').textContent = `GPS Status: ${gpsStatus}`;
+      postGpsSpeed(gpsSpeedKmh);
+    },
+    (err) => {
+      gpsStatus = err && err.code === 1 ? 'Nicht erlaubt' : 'Fehler';
+      gpsSpeedKmh = null;
+      set('gpsspeed', gpsSpeedKmh, 1);
+      document.getElementById('v-gpsstate').textContent = `GPS Status: ${gpsStatus}`;
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1500,
+      timeout: 6000,
+    }
+  );
+}
+
+async function resetTrip() {
+  try {
+    const res = await fetch('/api/trip/reset', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok && data.trip) renderTrip(data.trip);
+  } catch (_) {}
+}
+
+async function applyTripDistance() {
+  const raw = document.getElementById('trip-distance-input').value;
+  const distance = Number(raw);
+  if (!Number.isFinite(distance) || distance < 0) {
+    alert('Bitte gültige Kilometer eingeben.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/trip/distance', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ distance_km: distance }),
+    });
+    const data = await res.json();
+    if (data.ok && data.trip) renderTrip(data.trip);
+  } catch (_) {
+    alert('KM-Korrektur fehlgeschlagen.');
+  }
+}
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -469,6 +667,7 @@ function connect() {
       if (msg.engine.connected) {
         document.getElementById('ident-label').textContent = msg.engine.ident;
         renderData(msg.engine);
+        renderTrip(msg.engine.trip);
       } else {
         document.getElementById('ident-label').textContent = 'ECU Offline';
       }
@@ -486,6 +685,8 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 
+applyTheme(localStorage.getItem('dash-theme') || 'dark');
+startGpsWatch();
 connect();
 </script>
 </body>

@@ -169,6 +169,10 @@ sudo reboot
 # - Theme-Toggle: Umschalter oben rechts (Tag/Nacht), Zustand bleibt im Browser gespeichert.
 # - Trip-KM Korrektur: Im Trip-Tab kann die gefahrene Strecke manuell gesetzt werden
 #   (z. B. per Tageskilometerzähler), dadurch wird vor allem `Ø L/100` realistischer.
+# - V3.1 Tank-Kalibrierung (optional):
+#   - `Getankte Liter` eintragen (nach Volltanken) für sanftes Nachlernen des Modells.
+#   - `Tank +/-` als manueller Abgleich der Füllstandsschätzung.
+#   - Ohne Eingaben bleibt alles im Standardmodus mit stabilem Basisfaktor.
 
 # ── Troubleshooting ───────────────────────────────────────────────────────────
 # "Permission denied" auf /dev/ttyUSB0 → Gruppe dialout fehlt (s. Schritt 3)

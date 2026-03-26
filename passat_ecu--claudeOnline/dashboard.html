@@ -298,6 +298,21 @@
     <button class="btn" style="margin-top: 0;" onclick="applyTripDistance()">KM übernehmen</button>
   </div>
 
+  <div class="section-label">Tanken / Kalibrierung (optional)</div>
+  <div class="grid2">
+    <input class="input" id="trip-refuel-input" type="number" min="0" step="0.1" placeholder="Getankt in L (z. B. 34.2)">
+    <button class="btn" style="margin-top: 0;" onclick="applyRefuel()">Tanken speichern</button>
+  </div>
+  <div class="grid2">
+    <input class="input" id="trip-adjust-input" type="number" step="0.1" placeholder="Tank +/- in L (z. B. -1.2)">
+    <button class="btn" style="margin-top: 0;" onclick="applyTankAdjust()">Tank-Abgleich</button>
+  </div>
+  <div class="grid3">
+    <div class="mini-card"><div class="mini-val" id="v-calib-status">standard</div><div class="mini-lbl">Kalibrierung</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-calib-k">0.0011</div><div class="mini-lbl">K-Faktor</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-calib-samples">0</div><div class="mini-lbl">Lernzyklen</div></div>
+  </div>
+
   <button class="btn btn-primary" onclick="resetTrip()">Trip zurücksetzen</button>
   <div class="section-label">Hinweis: Alle Verbrauchswerte sind modellbasiert geschätzt.</div>
 </div>
@@ -430,6 +445,13 @@ function renderTrip(trip) {
   if (input && document.activeElement !== input && typeof trip.distance_km === 'number') {
     input.value = trip.distance_km.toFixed(1);
   }
+}
+
+function renderCalibration(cal) {
+  if (!cal) return;
+  set('calib-status', cal.status || 'standard');
+  set('calib-k', cal.k_estimate ?? 0.0011, 4);
+  set('calib-samples', cal.learn_samples ?? 0);
 }
 
 function applyTheme(mode) {
@@ -651,6 +673,56 @@ async function applyTripDistance() {
   }
 }
 
+async function applyRefuel() {
+  const liters = Number(document.getElementById('trip-refuel-input').value);
+  if (!Number.isFinite(liters) || liters <= 0) {
+    alert('Bitte gültige Tank-Liter eingeben.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/fuel/refuel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ liters }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(data.error || 'Tank-Eingabe fehlgeschlagen.');
+      return;
+    }
+    if (data.trip) renderTrip(data.trip);
+    if (data.calibration) renderCalibration(data.calibration);
+    document.getElementById('trip-refuel-input').value = '';
+  } catch (_) {
+    alert('Tank-Eingabe fehlgeschlagen.');
+  }
+}
+
+async function applyTankAdjust() {
+  const delta = Number(document.getElementById('trip-adjust-input').value);
+  if (!Number.isFinite(delta)) {
+    alert('Bitte gültigen Tank-Abgleich eingeben.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/fuel/adjust', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ delta_liters: delta }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(data.error || 'Tank-Abgleich fehlgeschlagen.');
+      return;
+    }
+    if (data.trip) renderTrip(data.trip);
+    if (data.calibration) renderCalibration(data.calibration);
+    document.getElementById('trip-adjust-input').value = '';
+  } catch (_) {
+    alert('Tank-Abgleich fehlgeschlagen.');
+  }
+}
+
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -668,6 +740,7 @@ function connect() {
         document.getElementById('ident-label').textContent = msg.engine.ident;
         renderData(msg.engine);
         renderTrip(msg.engine.trip);
+        renderCalibration(msg.engine.calibration);
       } else {
         document.getElementById('ident-label').textContent = 'ECU Offline';
       }

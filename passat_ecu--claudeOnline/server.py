@@ -74,6 +74,15 @@ class AppState:
             "speed_kmh": None,
             "speed_source": "N/A",
         }
+        self.calibration = {
+            "k_estimate": 0.0011,
+            "learn_samples": 0,
+            "last_source": "none",
+            "last_observed_liters": None,
+            "last_ratio": None,
+            "tank_level_est_l": None,
+            "status": "standard",
+        }
         self._trip_last_ts = time.time()
 
 state = AppState()
@@ -199,6 +208,7 @@ async def _broadcast():
             "data":    state.engine.last_data,
             "faults":  state.engine.fault_codes,
             "trip":    state.trip,
+            "calibration": state.calibration,
             "tick":    state.engine.tick
         },
         "abs": {
@@ -243,7 +253,7 @@ def _update_trip_state(data: dict):
     live_l100 = None
     if isinstance(rpm, (int, float)) and isinstance(inj, (int, float)):
         # Conservative estimate constant for mono-injector setup (documented as estimated).
-        k = 0.0011
+        k = float(state.calibration["k_estimate"])
         live_lph = max(0.0, float(rpm) * float(inj) * k)
         if speed_kmh is not None and speed_kmh > 3:
             live_l100 = (live_lph / speed_kmh) * 100.0
@@ -294,6 +304,31 @@ def _recalculate_trip_averages():
         state.trip["avg_l_per_100km"] = round((fuel_l / distance_km) * 100.0, 2)
 
 
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def _apply_soft_learning(observed_liters: float, source: str):
+    estimated = float(state.trip["fuel_l"])
+    distance = float(state.trip["distance_km"])
+    if observed_liters <= 0 or estimated < 0.25 or distance < 3:
+        state.calibration["status"] = "standard"
+        return
+
+    ratio = _clamp(observed_liters / estimated, 0.5, 1.5)
+    current_k = float(state.calibration["k_estimate"])
+    target_k = _clamp(current_k * ratio, 0.0004, 0.0030)
+    alpha = 0.20 if source == "refuel" else 0.08
+    new_k = current_k + alpha * (target_k - current_k)
+
+    state.calibration["k_estimate"] = round(new_k, 7)
+    state.calibration["learn_samples"] = int(state.calibration["learn_samples"]) + 1
+    state.calibration["last_source"] = source
+    state.calibration["last_observed_liters"] = round(observed_liters, 2)
+    state.calibration["last_ratio"] = round(ratio, 3)
+    state.calibration["status"] = "learning"
+
+
 async def _broadcast_error(msg: str, ecu_type: str = "engine"):
     payload = json.dumps({"type": "error", "ecu": ecu_type, "message": msg})
     dead = set()
@@ -329,6 +364,14 @@ class TripDistanceUpdate(BaseModel):
     distance_km: float
 
 
+class RefuelUpdate(BaseModel):
+    liters: float
+
+
+class TankAdjustUpdate(BaseModel):
+    delta_liters: float
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
@@ -355,6 +398,7 @@ def api_status():
         "global_tick":      state.global_tick,
         "clients":          len(clients),
         "trip":             state.trip,
+        "calibration":      state.calibration,
     }
 
 
@@ -379,6 +423,35 @@ async def api_trip_distance(update: TripDistanceUpdate):
     _recalculate_trip_averages()
     await _broadcast()
     return {"ok": True, "trip": state.trip}
+
+
+@app.post("/api/fuel/refuel")
+async def api_fuel_refuel(update: RefuelUpdate):
+    liters = float(update.liters)
+    if liters <= 0 or liters > 120:
+        return {"ok": False, "error": "Liter außerhalb gültigem Bereich"}
+    _apply_soft_learning(liters, "refuel")
+    if state.calibration["tank_level_est_l"] is None:
+        state.calibration["tank_level_est_l"] = 0.0
+    state.calibration["tank_level_est_l"] = round(float(state.calibration["tank_level_est_l"]) + liters, 2)
+    await _broadcast()
+    return {"ok": True, "trip": state.trip, "calibration": state.calibration}
+
+
+@app.post("/api/fuel/adjust")
+async def api_fuel_adjust(update: TankAdjustUpdate):
+    delta = float(update.delta_liters)
+    if delta < -40 or delta > 40:
+        return {"ok": False, "error": "Delta außerhalb gültigem Bereich"}
+    if state.calibration["tank_level_est_l"] is None:
+        state.calibration["tank_level_est_l"] = 0.0
+    state.calibration["tank_level_est_l"] = round(
+        max(0.0, float(state.calibration["tank_level_est_l"]) + delta), 2
+    )
+    observed = max(0.1, float(state.trip["fuel_l"]) - delta)
+    _apply_soft_learning(observed, "adjust")
+    await _broadcast()
+    return {"ok": True, "trip": state.trip, "calibration": state.calibration}
 
 
 @app.post("/api/read-faults")

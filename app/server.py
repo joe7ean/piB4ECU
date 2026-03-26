@@ -1,6 +1,6 @@
 """
 ECU WebSocket Server — Raspberry Pi Zero 2W
-Starte mit: python server.py
+Starte mit: python app/server.py
 
 iPhone verbindet sich via WLAN: http://<raspi-ip>:8000
 Dashboard läuft im Safari — keine App nötig.
@@ -32,12 +32,9 @@ SERIAL_PORT      = "/dev/ttyUSB0"  # KKL USB adapter
 POLL_INTERVAL    = 0.8              # Sekunden zwischen ECU-Abfragen
 FAULT_INTERVAL   = 30              # Fehlerspeicher alle N Sekunden lesen
 DEMO_MODE        = False            # True = simulierte Daten, kein KKL nötig
-# KW1281-Handshake: mehrere Versuche + JSONL für Fehleranalyse (Phase, Sync, KB1/2, Echo)
+# KW1281-Handshake: mehrere Versuche; optionales Diagnose-Log via ENV
 ECU_CONNECT_ATTEMPTS = int(os.environ.get("ECU_CONNECT_ATTEMPTS", "10"))
-ECU_DIAG_LOG = os.environ.get(
-    "ECU_DIAG_LOG",
-    str(_BASE_DIR / "logs" / "kw1281_handshake.jsonl"),
-)
+ECU_DIAG_LOG = os.environ.get("ECU_DIAG_LOG")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -106,11 +103,7 @@ async def ecu_poll_loop():
 
             # ── Verbinden ──────────────────────────────────────────────────────
             if not state.engine.connected:
-                log.info(
-                    "Verbinde mit Engine ECU (%s Versuche, Diagnose-Log: %s)...",
-                    ECU_CONNECT_ATTEMPTS,
-                    ECU_DIAG_LOG,
-                )
+                log.info("Verbinde mit Engine ECU (%s Versuche)...", ECU_CONNECT_ATTEMPTS)
                 ecu_engine = KW1281(SERIAL_PORT)
                 ident = await asyncio.get_event_loop().run_in_executor(
                     None,

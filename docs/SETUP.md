@@ -11,8 +11,9 @@
 
 sudo apt update && sudo apt install -y python3-pip python3-venv
 
-# Projekt kopieren (von deinem Mac per scp, oder direkt auf dem Pi klonen)
-mkdir ~/passat_ecu && cd ~/passat_ecu
+# Projekt klonen
+git clone https://github.com/joe7ean/piB4ECU.git
+cd ~/piB4ECU
 
 # Virtualenv anlegen
 python3 -m venv .venv
@@ -30,8 +31,8 @@ ls /dev/ttyUSB*   # sollte /dev/ttyUSB0 zeigen
 
 # ── 4. Demo-Modus testen (ohne KKL-Adapter) ───────────────────────────────────
 
-# In server.py: DEMO_MODE = True setzen
-python server.py
+# In app/server.py: DEMO_MODE = True setzen
+python app/server.py
 # Browser: http://localhost:8000
 
 # ── 5. Autostart via systemd ──────────────────────────────────────────────────
@@ -45,8 +46,8 @@ After=network.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/passat_ecu
-ExecStart=/home/pi/passat_ecu/.venv/bin/python server.py
+WorkingDirectory=/home/pi/piB4ECU
+ExecStart=/home/pi/piB4ECU/.venv/bin/python app/server.py
 Restart=always
 RestartSec=5
 StandardOutput=journal

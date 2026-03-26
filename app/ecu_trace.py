@@ -3,11 +3,9 @@
 Vordergrund-CLI: KW1281-Handshake + optionale Messwertblöcke — kein Webserver, kein Port 8000.
 
 Beispiele:
-  python ecu_trace.py
-  python ecu_trace.py --port /dev/ttyUSB0 --baud 4800 --attempts 10
-  python ecu_trace.py --measure 1 --attempts 3
-
-Logs: Standard JSONL unter logs/kw1281_handshake.jsonl (override mit --log oder ECU_DIAG_LOG).
+  python app/ecu_trace.py
+  python app/ecu_trace.py --port /dev/ttyUSB0 --baud 4800 --attempts 10
+  python app/ecu_trace.py --measure 1 --attempts 3
 
 Sauber beenden: Ctrl+C im selben Terminal (ein Prozess, Vordergrund).
 """
@@ -18,12 +16,8 @@ import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 
 from kw1281 import ECU_ENGINE, KW1281, KW1281Error
-
-_BASE = Path(__file__).resolve().parent
-_DEFAULT_LOG = _BASE / "logs" / "kw1281_handshake.jsonl"
 
 
 def main() -> int:
@@ -34,11 +28,6 @@ def main() -> int:
         "--attempts",
         type=int,
         default=int(os.environ.get("ECU_CONNECT_ATTEMPTS", "10")),
-    )
-    p.add_argument(
-        "--log",
-        default=os.environ.get("ECU_DIAG_LOG", str(_DEFAULT_LOG)),
-        help="JSONL-Pfad für Handshake-Diagnosezeilen",
     )
     p.add_argument(
         "--between",
@@ -66,16 +55,13 @@ def main() -> int:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    log_path = args.log
     print(f"Port={args.port} baud={args.baud} attempts={args.attempts}", flush=True)
-    print(f"Diagnose-Log: {log_path}", flush=True)
 
     ecu = KW1281(args.port, baud=args.baud, kkl_local_echo=not args.no_local_echo)
     try:
         ident = ecu.connect(
             ECU_ENGINE,
             max_attempts=args.attempts,
-            diagnostic_log_path=log_path,
             between_attempts_s=args.between,
         )
         print(f"OK — Ident: {ident}", flush=True)

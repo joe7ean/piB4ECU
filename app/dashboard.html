@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Passat ECU">
+<title>Passat B4 — ECU</title>
+<style>
+  :root {
+    --bg:     #0f0f0f;
+    --bg2:    #1a1a1a;
+    --bg3:    #232323;
+    --border: rgba(255,255,255,0.08);
+    --text:   #e8e6e0;
+    --muted:  #7a7870;
+    --blue:   #378ADD;
+    --green:  #1D9E75;
+    --amber:  #EF9F27;
+    --red:    #E24B4A;
+    --radius: 14px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bot: env(safe-area-inset-bottom, 0px);
+    --header-bg: rgba(15,15,15,0.85);
+  }
+  body.theme-light {
+    --bg: #f4f6f8;
+    --bg2: #ffffff;
+    --bg3: #e8edf3;
+    --border: rgba(0,0,0,0.1);
+    --text: #1b1d20;
+    --muted: #5d636b;
+    --header-bg: rgba(244,246,248,0.86);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; overflow-x: hidden; }
+
+  /* ── Header ── */
+  .header {
+    position: sticky; top: 0; z-index: 10;
+    padding: calc(var(--safe-top) + 12px) 16px 12px;
+    background: var(--header-bg);
+    backdrop-filter: blur(16px);
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-title { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+  .header-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .status-dot   { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background .4s; }
+  .status-dot.live { background: var(--green); animation: pulse 2s infinite; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .theme-toggle {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg2);
+    color: var(--text);
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex; gap: 0; padding: 12px 16px;
+    overflow-x: auto; scrollbar-width: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex-shrink: 0; padding: 7px 16px; border-radius: 20px;
+    font-size: 14px; font-weight: 500; border: none; cursor: pointer;
+    background: transparent; color: var(--muted); transition: all .2s;
+  }
+  .tab.active { background: var(--bg3); color: var(--text); }
+
+  /* ── Scroll area ── */
+  .content {
+    padding: 16px;
+    padding-bottom: calc(var(--safe-bot) + 24px);
+    display: none;
+  }
+  .content.active { display: block; }
+
+  /* ── Smart Feedback Banner ── */
+  .smart-banner {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-left: 4px solid var(--blue);
+    transition: all 0.3s;
+  }
+  .smart-banner.cold { border-left-color: var(--blue); }
+  .smart-banner.warm { border-left-color: var(--amber); }
+  .smart-banner.hot { border-left-color: var(--green); }
+  .smart-banner.danger { border-left-color: var(--red); background: rgba(226,75,74,0.1); }
+  .smart-banner.eco { border-left-color: var(--green); background: rgba(29,158,117,0.1); }
+
+  .banner-icon { font-size: 24px; }
+  .banner-text h3 { font-size: 14px; margin-bottom: 2px; }
+  .banner-text p { font-size: 12px; color: var(--muted); }
+
+  /* ── Cards ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .grid1 { margin-bottom: 10px; }
+
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px;
+    position: relative; overflow: hidden;
+  }
+  .card-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .card-value { font-size: 30px; font-weight: 600; letter-spacing: -.02em; line-height: 1; }
+  .card-unit  { font-size: 13px; color: var(--muted); margin-left: 2px; }
+  .card-accent { position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 14px 14px 0 0; }
+
+  /* ── Sparkline ── */
+  .spark { display: block; width: 100%; height: 40px; margin-top: 8px; }
+
+  /* ── Mini values ── */
+  .mini-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .mini-val  { font-size: 20px; font-weight: 600; }
+  .mini-lbl  { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Bitmask ── */
+  .bitmask { display: flex; gap: 2px; margin-top: 8px; }
+  .bit {
+    flex: 1; height: 16px; border-radius: 3px;
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--muted); font-family: monospace;
+  }
+  .bit.on { background: var(--blue); color: #fff; }
+
+  /* ── Faults ── */
+  .fault-item {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-bottom: 8px;
+  }
+  .fault-code  { font-size: 12px; font-weight: 600; font-family: monospace; flex-shrink: 0; padding: 3px 8px; border-radius: 6px; }
+  .fault-err   { background: rgba(226,75,74,.2); color: #f08080; }
+  .fault-warn  { background: rgba(239,159,39,.2); color: #f0b060; }
+  .fault-desc  { font-size: 13px; line-height: 1.4; }
+  .fault-status{ font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .no-faults   { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 14px; }
+
+  /* ── Action button ── */
+  .btn {
+    width: 100%; padding: 14px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--bg3);
+    color: var(--text); font-size: 15px; font-weight: 500;
+    cursor: pointer; margin-top: 8px; transition: opacity .2s;
+  }
+  .btn:active { opacity: .6; }
+  .btn-primary { background: rgba(55,138,221,.15); color: var(--blue); border-color: rgba(55,138,221,.3); }
+  .btn-danger { border-color: rgba(226,75,74,.4); color: var(--red); }
+
+  /* ── Offline banner ── */
+  #offline-banner {
+    display: none; background: rgba(226,75,74,.15); border-bottom: 1px solid rgba(226,75,74,.3);
+    padding: 8px 16px; font-size: 13px; color: var(--red); text-align: center;
+  }
+
+  /* ── Section label ── */
+  .section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 8px; }
+  .input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div id="offline-banner">⚠ Verbindung unterbrochen — reconnecting…</div>
+
+<div class="header">
+  <div>
+    <div class="header-title">Passat B4</div>
+    <div class="header-sub" id="ident-label">Verbinde…</div>
+  </div>
+  <div class="header-right">
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌙 Nacht</button>
+    <div class="status-dot" id="status-dot"></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('drive', this)">Antrieb</button>
+  <button class="tab"        onclick="showTab('trip', this)">Trip</button>
+  <button class="tab"        onclick="showTab('faults', this)">Fehler</button>
+</div>
+
+<!-- ── ANTRIEB ── -->
+<div class="content active" id="tab-drive">
+  
+  <!-- Smart Feedback Banner -->
+  <div id="smart-banner" class="smart-banner cold">
+    <div class="banner-icon" id="banner-icon">❄️</div>
+    <div class="banner-text">
+        <h3 id="banner-title">Warte auf Daten</h3>
+        <p id="banner-desc">Verbinde mit Motorsteuergerät...</p>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card" id="card-rpm">
+      <div class="card-accent" style="background:var(--blue)"></div>
+      <div class="card-label">Drehzahl</div>
+      <div><span class="card-value" id="v-rpm">—</span><span class="card-unit">U/min</span></div>
+      <svg class="spark" id="spark-rpm" viewBox="0 0 200 40" preserveAspectRatio="none">
+        <polyline id="pl-rpm" fill="none" stroke="var(--blue)" stroke-width="1.5" points=""/>
+      </svg>
+    </div>
+    <div class="card">
+      <div class="card-accent" style="background:var(--red)"></div>
+      <div class="card-label">Kühlmittel</div>
+      <div><span class="card-value" id="v-coolant">—</span><span class="card-unit">°C</span></div>
+      <svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none">
+        <polyline id="pl-coolant" fill="none" stroke="var(--red)" stroke-width="1.5" points=""/>
+      </svg>
+    </div>
+  </div>
+  
+  <div class="grid3">
+    <div class="mini-card"><div class="mini-val" id="v-lambda">—</div><div class="mini-lbl">Lambda λ</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-inj">—</div><div class="mini-lbl">Einspritz. ms</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-voltage">—</div><div class="mini-lbl">Batterie V</div></div>
+  </div>
+  
+  <div class="grid3">
+    <div class="mini-card"><div class="mini-val" id="v-airtemp">—</div><div class="mini-lbl">Ansaugluft °C</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-timing">—</div><div class="mini-lbl">Zündwinkel °</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-egr">—</div><div class="mini-lbl">Abgasrückführung °C</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="mini-card"><div class="mini-val" id="v-gpsspeed">—</div><div class="mini-lbl">GPS km/h</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-speedsource">—</div><div class="mini-lbl" id="v-gpsstate">GPS Status: N/A</div></div>
+  </div>
+
+  <div class="card" style="margin-top: 10px;">
+    <div class="card-label" style="display: flex; justify-content: space-between;">
+      <span>Betriebszustand</span>
+      <span id="v-opstatus-text" style="color: var(--blue)">—</span>
+    </div>
+    <div class="bitmask" id="v-bitmask">
+      <div class="bit">8</div><div class="bit">7</div><div class="bit">6</div><div class="bit">5</div>
+      <div class="bit">4</div><div class="bit">3</div><div class="bit">2</div><div class="bit">1</div>
+    </div>
+    <div style="font-size: 10px; color: var(--muted); margin-top: 6px; display: flex; justify-content: space-between;">
+      <span id="lbl-b8">B8: Kaltstart</span>
+      <span id="lbl-b7">B7: Lambda</span>
+      <span id="lbl-b2">B2: Leerlauf</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── TRIP ── -->
+<div class="content" id="tab-trip">
+  <div class="section-label">Verbrauch (geschätzt)</div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-label">Live Verbrauch</div>
+      <div><span class="card-value" id="v-trip-live-cons">—</span><span class="card-unit" id="v-trip-live-unit">L/100km</span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Live L/h</div>
+      <div><span class="card-value" id="v-trip-live-lph">—</span><span class="card-unit">L/h</span></div>
+    </div>
+  </div>
+
+  <div class="section-label">Trip seit Start</div>
+  <div class="grid3">
+    <div class="mini-card"><div class="mini-val" id="v-trip-distance">—</div><div class="mini-lbl">Strecke km</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-trip-time">—</div><div class="mini-lbl">Fahrzeit</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-trip-avg-speed">—</div><div class="mini-lbl">Ø km/h</div></div>
+  </div>
+  <div class="grid2">
+    <div class="mini-card"><div class="mini-val" id="v-trip-avg-cons">—</div><div class="mini-lbl">Ø L/100 km</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-trip-fuel">—</div><div class="mini-lbl">Kraftstoff L</div></div>
+  </div>
+  <div class="section-label">Trip-KM manuell korrigieren (letzte Fahrt)</div>
+  <div class="grid2">
+    <input class="input" id="trip-distance-input" type="number" min="0" step="0.1" placeholder="z. B. 42.6">
+    <button class="btn" style="margin-top: 0;" onclick="applyTripDistance()">KM übernehmen</button>
+  </div>
+
+  <div class="section-label">Tanken / Kalibrierung (optional)</div>
+  <div class="grid2">
+    <input class="input" id="trip-refuel-input" type="number" min="0" step="0.1" placeholder="Getankt in L (z. B. 34.2)">
+    <button class="btn" style="margin-top: 0;" onclick="applyRefuel()">Tanken speichern</button>
+  </div>
+  <div class="grid2">
+    <input class="input" id="trip-adjust-input" type="number" step="0.1" placeholder="Tank +/- in L (z. B. -1.2)">
+    <button class="btn" style="margin-top: 0;" onclick="applyTankAdjust()">Tank-Abgleich</button>
+  </div>
+  <div class="grid3">
+    <div class="mini-card"><div class="mini-val" id="v-calib-status">standard</div><div class="mini-lbl">Kalibrierung</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-calib-k">0.0011</div><div class="mini-lbl">K-Faktor</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-calib-samples">0</div><div class="mini-lbl">Lernzyklen</div></div>
+  </div>
+
+  <button class="btn btn-primary" onclick="resetTrip()">Trip zurücksetzen</button>
+  <div class="section-label">Hinweis: Alle Verbrauchswerte sind modellbasiert geschätzt.</div>
+</div>
+
+<!-- ── FEHLERCODES ── -->
+<div class="content" id="tab-faults">
+  <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+    <button class="btn btn-primary" style="margin-top: 0;" onclick="readFaults()">Auslesen</button>
+    <button class="btn btn-danger" style="margin-top: 0;" onclick="clearFaults()">Löschen</button>
+  </div>
+  <div class="section-label" id="last-fault-sync" style="text-align: right; margin-top: -8px;">Zuletzt aktualisiert: Nie</div>
+  
+  <div id="fault-list">
+    <div class="no-faults">Bitte manuell auslesen.</div>
+  </div>
+</div>
+
+<script>
+// ── Sparkline history ──────────────────────────────────────────────────────────
+const hist = {};
+const MAX_HIST = 60;
+
+function push(key, val) {
+  if (!hist[key]) hist[key] = [];
+  hist[key].push(val);
+  if (hist[key].length > MAX_HIST) hist[key].shift();
+}
+
+function sparkPoints(key, w=200, h=40) {
+  const arr = hist[key] || [];
+  if (arr.length < 2) return '';
+  const mn = Math.min(...arr), mx = Math.max(...arr);
+  const range = mx - mn || 1;
+  return arr.map((v,i) =>
+    `${(i/(arr.length-1)*w).toFixed(1)},${(h-(v-mn)/range*(h-4)-2).toFixed(1)}`
+  ).join(' ');
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+// ── Data rendering ─────────────────────────────────────────────────────────────
+function set(id, val, decimals=0) {
+  const el = document.getElementById('v-'+id);
+  if (!el) return;
+  el.textContent = val === null || val === undefined ? '—'
+    : typeof val === 'number' ? val.toFixed(decimals) : val;
+}
+
+function renderData(data) {
+  const d = data.data || {};
+  const get = (key) => d[key]?.value;
+
+  const rpm = get('Drehzahl');
+  if (rpm !== undefined) { set('rpm', rpm); push('rpm', rpm); }
+
+  const cool = get('Kühlmitteltemperatur');
+  if (cool !== undefined) { set('coolant', cool); push('coolant', cool); }
+
+  set('lambda',  get('Lambda'),        3);
+  set('timing',  get('Zündwinkel'),    1);
+  set('inj',     get('Einspritzzeit'), 2);
+  set('voltage', get('Spannung'),      1);
+  set('airtemp', get('Ansauglufttemperatur'), 0);
+  set('egr',     get('Abgasrückführung'), 1);
+  set('gpsspeed', gpsSpeedKmh, 1);
+
+  // Update sparklines
+  const sparks = {rpm:'rpm', coolant:'coolant'};
+  for (const [histKey, plId] of Object.entries(sparks)) {
+    const pl = document.getElementById('pl-'+plId);
+    if (pl) pl.setAttribute('points', sparkPoints(histKey));
+  }
+
+  // Operating Status Bitmask
+  const opStatus = get('Betriebszustand');
+  if (opStatus !== undefined) {
+    const binStr = opStatus.toString(2).padStart(8, '0');
+    const bitmaskEl = document.getElementById('v-bitmask');
+    let bitsHtml = '';
+    for (let i = 0; i < 8; i++) {
+        const isOn = binStr[i] === '1';
+        bitsHtml += `<div class="bit ${isOn ? 'on' : ''}">${8-i}</div>`;
+    }
+    bitmaskEl.innerHTML = bitsHtml;
+
+    const isIdle = binStr[6] === '1'; // Bit 2
+    const isLambda = binStr[1] === '1'; // Bit 7
+    document.getElementById('v-opstatus-text').textContent = isIdle ? 'Leerlauf' : 'Fahrt';
+    document.getElementById('lbl-b7').textContent = `B7: Lambda ${isLambda ? '✅' : '❌'}`;
+    document.getElementById('lbl-b2').textContent = `B2: Leerlauf ${isIdle ? '✅' : '❌'}`;
+  }
+
+  updateSmartFeedback(d);
+}
+
+function fmtDuration(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined) return '—';
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
+function renderTrip(trip) {
+  if (!trip) return;
+  const speedSource = trip.speed_source || 'N/A';
+  set('speedsource', speedSource);
+
+  const liveL100 = trip.live_l_per_100km;
+  const liveLph = trip.live_lph;
+  const speed = trip.speed_kmh;
+  const isStand = speed === null || speed === undefined || speed < 3;
+  document.getElementById('v-trip-live-unit').textContent = isStand ? 'L/h' : 'L/100km';
+  set('trip-live-cons', isStand ? liveLph : liveL100, 2);
+  set('trip-live-lph', liveLph, 2);
+
+  set('trip-distance', trip.distance_km, 2);
+  document.getElementById('v-trip-time').textContent = fmtDuration(trip.drive_time_s);
+  set('trip-avg-speed', trip.avg_speed_kmh, 1);
+  set('trip-avg-cons', trip.avg_l_per_100km, 2);
+  set('trip-fuel', trip.fuel_l, 2);
+  const input = document.getElementById('trip-distance-input');
+  if (input && document.activeElement !== input && typeof trip.distance_km === 'number') {
+    input.value = trip.distance_km.toFixed(1);
+  }
+}
+
+function renderCalibration(cal) {
+  if (!cal) return;
+  set('calib-status', cal.status || 'standard');
+  set('calib-k', cal.k_estimate ?? 0.0011, 4);
+  set('calib-samples', cal.learn_samples ?? 0);
+}
+
+function applyTheme(mode) {
+  const isLight = mode === 'light';
+  document.body.classList.toggle('theme-light', isLight);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = isLight ? '☀️ Tag' : '🌙 Nacht';
+  localStorage.setItem('dash-theme', isLight ? 'light' : 'dark');
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.contains('theme-light');
+  applyTheme(isLight ? 'dark' : 'light');
+}
+
+// ── Smart Feedback Engine ──────────────────────────────────────────────────────
+function updateSmartFeedback(d) {
+  const banner = document.getElementById("smart-banner");
+  const bannerIcon = document.getElementById("banner-icon");
+  const bannerTitle = document.getElementById("banner-title");
+  const bannerDesc = document.getElementById("banner-desc");
+
+  const temp = d["Kühlmitteltemperatur"]?.value;
+  const rpm = d["Drehzahl"]?.value;
+  const inj = d["Einspritzzeit"]?.value;
+  const lambda = d["Lambda"]?.value;
+  const volt = d["Spannung"]?.value;
+  
+  let isIdle = false;
+  if (d["Betriebszustand"]) {
+      const binStr = d["Betriebszustand"].value.toString(2).padStart(8, '0');
+      isIdle = binStr[6] === '1'; // Bit 2
+  }
+
+  banner.className = "smart-banner";
+
+  // 1. Falschluft / Lambda Warnung (Highest Priority)
+  if (lambda && lambda > 1.10 && isIdle) {
+      banner.classList.add("danger");
+      bannerIcon.textContent = "⚠️";
+      bannerTitle.textContent = "Gemisch zu mager!";
+      bannerDesc.textContent = "Lambda > 1.10. Mögliches Falschluft-Leck (Vergaserflansch prüfen).";
+      return;
+  }
+
+  // 2. Batterie Warnung
+  if (volt && volt < 13.0 && rpm > 500) {
+      banner.classList.add("warning");
+      bannerIcon.textContent = "🔋";
+      bannerTitle.textContent = "Spannung niedrig";
+      bannerDesc.textContent = "Lichtmaschine lädt schwach (< 13V).";
+      return;
+  }
+
+  // 3. Coasting / Schubabschaltung
+  if (rpm > 1500 && isIdle && inj !== undefined && inj < 0.5) {
+      banner.classList.add("eco");
+      bannerIcon.textContent = "🍃";
+      bannerTitle.textContent = "Schubabschaltung aktiv";
+      bannerDesc.textContent = "0.0 L/100km - Sehr effizient!";
+      return;
+  }
+
+  // 4. Warm-Up Phase
+  if (temp !== undefined) {
+      if (temp < 60) {
+          banner.classList.add("cold");
+          bannerIcon.textContent = "❄️";
+          bannerTitle.textContent = "Motor kalt";
+          if (rpm > 3000) {
+              banner.classList.add("danger");
+              bannerDesc.textContent = "Drehzahl reduzieren! Motor schonen.";
+          } else {
+              bannerDesc.textContent = "Hohe Drehzahlen vermeiden.";
+          }
+      } else if (temp >= 60 && temp < 80) {
+          banner.classList.add("warm");
+          bannerIcon.textContent = "🌡️";
+          bannerTitle.textContent = "Wird warm";
+          bannerDesc.textContent = "Betriebstemperatur fast erreicht.";
+      } else {
+          banner.classList.add("hot");
+          bannerIcon.textContent = "✅";
+          bannerTitle.textContent = "Betriebswarm";
+          bannerDesc.textContent = "Volle Leistung verfügbar.";
+      }
+  }
+}
+
+// ── Faults API ─────────────────────────────────────────────────────────────────
+async function readFaults() {
+  const el = document.getElementById('fault-list');
+  el.innerHTML = '<div class="no-faults">Lese Fehler aus...</div>';
+  try {
+      const res = await fetch('/api/read-faults?ecu=engine', { method: 'POST' });
+      const data = await res.json();
+      
+      const now = new Date();
+      document.getElementById('last-fault-sync').textContent = `Zuletzt aktualisiert: ${now.toLocaleTimeString('de-DE')}`;
+      
+      if (data.ok) {
+          renderFaults(data.faults);
+      } else {
+          el.innerHTML = `<div class="no-faults" style="color:var(--red)">Fehler: ${data.error}</div>`;
+      }
+  } catch (e) {
+      el.innerHTML = `<div class="no-faults" style="color:var(--red)">Netzwerkfehler</div>`;
+  }
+}
+
+async function clearFaults() {
+  if(!confirm("Fehlerspeicher wirklich löschen?")) return;
+  try {
+      const res = await fetch('/api/clear-faults?ecu=engine', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+          readFaults();
+      } else {
+          alert("Löschen fehlgeschlagen: " + data.error);
+      }
+  } catch (e) {
+      alert("Netzwerkfehler");
+  }
+}
+
+function renderFaults(faults) {
+  const el = document.getElementById('fault-list');
+  if (!faults || !faults.length) {
+    el.innerHTML = '<div class="no-faults" style="color:var(--green)">✓ Kein Fehler im Speicher abgelegt.</div>';
+    return;
+  }
+  el.innerHTML = faults.map(f => `
+    <div class="fault-item">
+      <span class="fault-code ${f.status==='gespeichert'?'fault-err':'fault-warn'}">${f.code}</span>
+      <div>
+        <div class="fault-desc">${f.desc}</div>
+        <div class="fault-status">${f.status}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+let ws, reconnectTimer;
+let gpsWatchId = null;
+let gpsSpeedKmh = null;
+let gpsStatus = 'N/A';
+
+async function postGpsSpeed(speedKmh) {
+  try {
+    await fetch('/api/gps-speed', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({speed_kmh: speedKmh}),
+    });
+  } catch (_) {}
+}
+
+function startGpsWatch() {
+  if (!('geolocation' in navigator)) {
+    gpsStatus = 'Nicht verfügbar';
+    document.getElementById('v-gpsstate').textContent = `GPS Status: ${gpsStatus}`;
+    return;
+  }
+  if (gpsWatchId !== null) return;
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const mps = pos.coords.speed;
+      if (typeof mps === 'number' && !Number.isNaN(mps) && mps >= 0) {
+        gpsSpeedKmh = mps * 3.6;
+        gpsStatus = 'Aktiv';
+      } else {
+        gpsSpeedKmh = null;
+        gpsStatus = 'Aktiv (ohne Speed)';
+      }
+      set('gpsspeed', gpsSpeedKmh, 1);
+      document.getElementById('v-gpsstate').textContent = `GPS Status: ${gpsStatus}`;
+      postGpsSpeed(gpsSpeedKmh);
+    },
+    (err) => {
+      gpsStatus = err && err.code === 1 ? 'Nicht erlaubt' : 'Fehler';
+      gpsSpeedKmh = null;
+      set('gpsspeed', gpsSpeedKmh, 1);
+      document.getElementById('v-gpsstate').textContent = `GPS Status: ${gpsStatus}`;
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1500,
+      timeout: 6000,
+    }
+  );
+}
+
+async function resetTrip() {
+  try {
+    const res = await fetch('/api/trip/reset', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok && data.trip) renderTrip(data.trip);
+  } catch (_) {}
+}
+
+async function applyTripDistance() {
+  const raw = document.getElementById('trip-distance-input').value;
+  const distance = Number(raw);
+  if (!Number.isFinite(distance) || distance < 0) {
+    alert('Bitte gültige Kilometer eingeben.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/trip/distance', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ distance_km: distance }),
+    });
+    const data = await res.json();
+    if (data.ok && data.trip) renderTrip(data.trip);
+  } catch (_) {
+    alert('KM-Korrektur fehlgeschlagen.');
+  }
+}
+
+async function applyRefuel() {
+  const liters = Number(document.getElementById('trip-refuel-input').value);
+  if (!Number.isFinite(liters) || liters <= 0) {
+    alert('Bitte gültige Tank-Liter eingeben.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/fuel/refuel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ liters }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(data.error || 'Tank-Eingabe fehlgeschlagen.');
+      return;
+    }
+    if (data.trip) renderTrip(data.trip);
+    if (data.calibration) renderCalibration(data.calibration);
+    document.getElementById('trip-refuel-input').value = '';
+  } catch (_) {
+    alert('Tank-Eingabe fehlgeschlagen.');
+  }
+}
+
+async function applyTankAdjust() {
+  const delta = Number(document.getElementById('trip-adjust-input').value);
+  if (!Number.isFinite(delta)) {
+    alert('Bitte gültigen Tank-Abgleich eingeben.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/fuel/adjust', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ delta_liters: delta }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(data.error || 'Tank-Abgleich fehlgeschlagen.');
+      return;
+    }
+    if (data.trip) renderTrip(data.trip);
+    if (data.calibration) renderCalibration(data.calibration);
+    document.getElementById('trip-adjust-input').value = '';
+  } catch (_) {
+    alert('Tank-Abgleich fehlgeschlagen.');
+  }
+}
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen = () => {
+    document.getElementById('offline-banner').style.display = 'none';
+    document.getElementById('status-dot').classList.add('live');
+    clearTimeout(reconnectTimer);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'data' && msg.engine) {
+      if (msg.engine.connected) {
+        document.getElementById('ident-label').textContent = msg.engine.ident;
+        renderData(msg.engine);
+        renderTrip(msg.engine.trip);
+        renderCalibration(msg.engine.calibration);
+      } else {
+        document.getElementById('ident-label').textContent = 'ECU Offline';
+      }
+    } else if (msg.type === 'error') {
+      document.getElementById('ident-label').textContent = '⚠ ' + msg.message;
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('status-dot').classList.remove('live');
+    document.getElementById('offline-banner').style.display = 'block';
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+applyTheme(localStorage.getItem('dash-theme') || 'dark');
+startGpsWatch();
+connect();
+</script>
+</body>
+</html>

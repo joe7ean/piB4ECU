@@ -125,6 +125,41 @@ journalctl -u passat-ecu -f
 
 Die Hotspot-Einrichtung ist in `docs/HOTSPOT.md` beschrieben.
 
+## 9) OTA Update im Auto (Tag-basiert + Rollback)
+
+Empfohlener Ablauf:
+
+1. Mit dem Raspi-Hotspot verbinden
+2. Per SSH auf den Raspi
+3. Gezielt Version deployen und Service pruefen
+
+Neueste `main` deployen:
+
+```bash
+cd ~/piB4ECU
+./scripts/update.sh
+```
+
+Exaktes Release-Tag deployen:
+
+```bash
+cd ~/piB4ECU
+./scripts/update.sh v1.0.0-alpha.1
+```
+
+Rollback auf zuvor installierte Version:
+
+```bash
+cd ~/piB4ECU
+./scripts/rollback.sh
+```
+
+Hinweise:
+
+- `update.sh` speichert den letzten Deploy-Stand in `.deploy-state`.
+- `rollback.sh` nutzt diesen Zustand fuer einen deterministischen Ruecksprung (nicht nur "eins drunter").
+- Beide Skripte synchronisieren Abhaengigkeiten und pruefen nach Restart den Status von `passat-ecu`.
+
 ## Troubleshooting
 
 - `Permission denied` auf `/dev/ttyUSB0`: Benutzer noch nicht in `dialout` aktiv

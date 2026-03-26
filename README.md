@@ -41,6 +41,23 @@ Optional anderer Port:
 - `docs/MEASURING_BLOCKS.md` - Dokumentierte Messwertbloecke
 - `CHANGELOG.md` - Aenderungshistorie und Releases
 
+## OTA Updates (Tag-basiert)
+
+Fuer Updates direkt im Auto sind zwei Skripte enthalten:
+
+- `scripts/update.sh` - deployt `origin/main` oder ein explizites Release-Tag
+- `scripts/rollback.sh` - springt auf die zuletzt installierte Version zurueck
+
+Beispiele:
+
+```bash
+./scripts/update.sh
+./scripts/update.sh v1.0.0-alpha.1
+./scripts/rollback.sh
+```
+
+Die Skripte verwalten den Deploy-Status in `.deploy-state` (`CURRENT_REF`, `PREVIOUS_REF`, Commits).
+
 ## Release Status
 
 Aktueller Release-Kanal: `v1.0.0-alpha.1` (Pre-Release)

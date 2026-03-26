@@ -48,5 +48,5 @@ Aktueller Release-Kanal: `v1.0.0-alpha.1` (Pre-Release)
 ## Hinweise fuer Veroeffentlichung
 
 - Laufzeit- und lokale Dateien sind per `.gitignore` ausgeschlossen (`.venv`, `__pycache__`, `.cursor`).
-- Optionale Ideen/Notizen bleiben in `ideas.md` lokal und untracked.
+
 - Lizenz: `MIT` (siehe `LICENSE`)

@@ -21,7 +21,6 @@ logs/
 # Local/editor state
 .cursor/
 .vscode/
-.idea/
 
 # OS files
 .DS_Store

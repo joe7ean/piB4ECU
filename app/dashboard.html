@@ -246,9 +246,10 @@
     <div class="mini-card"><div class="mini-val" id="v-egr">—</div><div class="mini-lbl">Abgasrückführung °C</div></div>
   </div>
 
-  <div class="grid2">
+  <div class="grid3">
     <div class="mini-card"><div class="mini-val" id="v-gpsspeed">—</div><div class="mini-lbl">GPS km/h</div></div>
     <div class="mini-card"><div class="mini-val" id="v-speedsource">—</div><div class="mini-lbl" id="v-gpsstate">GPS Status: N/A</div></div>
+    <div class="mini-card"><div class="mini-val" id="v-pi-temp">—</div><div class="mini-lbl">Pi Temp °C</div></div>
   </div>
 
   <div class="card" style="margin-top: 10px;">
@@ -384,6 +385,7 @@ function renderData(data) {
   set('airtemp', get('Ansauglufttemperatur'), 0);
   set('egr',     get('Abgasrückführung'), 1);
   set('gpsspeed', gpsSpeedKmh, 1);
+  set('pi-temp', data.pi_temp_c, 1);
 
   // Update sparklines
   const sparks = {rpm:'rpm', coolant:'coolant'};

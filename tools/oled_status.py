@@ -27,7 +27,7 @@ POLL_INTERVAL_S = float(os.environ.get("ECU_OLED_POLL_S", "0.8"))
 BOOTING_SECONDS = float(os.environ.get("ECU_OLED_BOOTING_S", "4.0"))
 HTTP_TIMEOUT_S = float(os.environ.get("ECU_OLED_HTTP_TIMEOUT_S", "1.2"))
 
-ECU_HTTP_PORT = os.environ.get("ECU_HTTP_PORT", "8080")
+ECU_HTTP_PORT = os.environ.get("ECU_HTTP_PORT", "1994")
 DEFAULT_URL = f"http://127.0.0.1:{ECU_HTTP_PORT}/api/status"
 STATUS_URL = os.environ.get("ECU_OLED_URL", DEFAULT_URL)
 

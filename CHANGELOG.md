@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+- Default HTTP port is now `1994` (still overridable via `ECU_HTTP_PORT`, e.g. `80` for reverse-proxy setups).
+
 ## [1.0.0-alpha.1] - 2026-03-26
 
 ### Added

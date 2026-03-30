@@ -2,7 +2,7 @@
 ECU WebSocket Server — Raspberry Pi Zero 2W
 Starte mit: python app/server.py
 
-iPhone verbindet sich via WLAN: http://<raspi-ip>:8000
+iPhone verbindet sich via WLAN: http://<raspi-ip>:1994
 Dashboard läuft im Safari — keine App nötig.
 """
 
@@ -38,7 +38,7 @@ DEMO_MODE        = False            # True = simulierte Daten, kein KKL nötig
 # KW1281-Handshake: mehrere Versuche; optionales Diagnose-Log via ENV
 ECU_CONNECT_ATTEMPTS = int(os.environ.get("ECU_CONNECT_ATTEMPTS", "10"))
 ECU_DIAG_LOG = os.environ.get("ECU_DIAG_LOG")
-ECU_HTTP_PORT = int(os.environ.get("ECU_HTTP_PORT", "8080"))
+ECU_HTTP_PORT = int(os.environ.get("ECU_HTTP_PORT", "1994"))
 
 
 def _env_bool(name: str, default: bool) -> bool:

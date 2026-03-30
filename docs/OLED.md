@@ -31,7 +31,7 @@ python tools/oled_status.py
 
 Optional environment variables:
 
-- `ECU_OLED_URL` (default `http://127.0.0.1:${ECU_HTTP_PORT:-8080}/api/status`)
+- `ECU_OLED_URL` (default `http://127.0.0.1:${ECU_HTTP_PORT:-1994}/api/status`)
 - `ECU_OLED_POLL_S` (default `0.8`)
 - `ECU_OLED_BOOTING_S` (default `4.0`)
 - `ECU_OLED_HTTP_TIMEOUT_S` (default `1.2`)
@@ -50,7 +50,7 @@ Wants=network.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/piB4ECU
-Environment=ECU_HTTP_PORT=8080
+Environment=ECU_HTTP_PORT=1994
 ExecStart=/home/pi/piB4ECU/.venv/bin/python tools/oled_status.py
 Restart=always
 RestartSec=2

@@ -2,11 +2,13 @@
 ECU WebSocket Server — Raspberry Pi Zero 2W
 Starte mit: python app/server.py
 
-iPhone verbindet sich via WLAN: http://<raspi-ip>:8000
+iPhone verbindet sich via WLAN: http://<raspi-ip>:1994
 Dashboard läuft im Safari — keine App nötig.
 """
 
 import asyncio
+import copy
+import gzip
 import json
 import logging
 import math
@@ -27,6 +29,7 @@ from kw1281 import KW1281, ECU_ENGINE, KW1281Error
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 _BASE_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _BASE_DIR.parent
 SERIAL_PORT      = "/dev/ttyUSB0"  # KKL USB adapter
 ##SERIAL_PORT      = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Cable_12345678-if00-port0"   # KKL USB adapter
 POLL_INTERVAL    = 0.8              # Sekunden zwischen ECU-Abfragen
@@ -35,7 +38,23 @@ DEMO_MODE        = False            # True = simulierte Daten, kein KKL nötig
 # KW1281-Handshake: mehrere Versuche; optionales Diagnose-Log via ENV
 ECU_CONNECT_ATTEMPTS = int(os.environ.get("ECU_CONNECT_ATTEMPTS", "10"))
 ECU_DIAG_LOG = os.environ.get("ECU_DIAG_LOG")
-ECU_HTTP_PORT = int(os.environ.get("ECU_HTTP_PORT", "80"))
+ECU_HTTP_PORT = int(os.environ.get("ECU_HTTP_PORT", "1994"))
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+ECU_LOG_ENABLED = _env_bool("ECU_LOG_ENABLED", True)
+ECU_LOG_DIR = Path(os.environ.get("ECU_LOG_DIR", str(_PROJECT_ROOT / "logs"))).expanduser()
+ECU_LOG_ROTATE_MB = max(1, int(os.environ.get("ECU_LOG_ROTATE_MB", "25")))
+ECU_LOG_MAX_FILES = max(1, int(os.environ.get("ECU_LOG_MAX_FILES", "12")))
+ECU_LOG_MAX_TOTAL_MB = max(1, int(os.environ.get("ECU_LOG_MAX_TOTAL_MB", "300")))
+ECU_LOG_MAX_QUEUE = max(100, int(os.environ.get("ECU_LOG_MAX_QUEUE", "2000")))
+ECU_LOG_GZIP = _env_bool("ECU_LOG_GZIP", True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -87,6 +106,155 @@ state = AppState()
 clients: set[WebSocket] = set()
 ecu_engine: Optional[KW1281] = None
 ecu_abs: Optional[KW1281] = None
+telemetry_logger = None
+
+
+def _compact_engine_data() -> dict:
+    """Return a compact subset for tiny external status displays."""
+    keys = ("Kühlmitteltemperatur", "Spannung")
+    compact = {}
+    for key in keys:
+        value = state.engine.last_data.get(key)
+        if isinstance(value, dict):
+            compact[key] = value
+    return compact
+
+
+class TelemetryLogger:
+    def __init__(
+        self,
+        log_dir: Path,
+        rotate_mb: int,
+        max_files: int,
+        max_total_mb: int,
+        max_queue: int,
+        use_gzip: bool,
+    ):
+        self.log_dir = log_dir
+        self.rotate_bytes = rotate_mb * 1024 * 1024
+        self.max_files = max_files
+        self.max_total_bytes = max_total_mb * 1024 * 1024
+        self.use_gzip = use_gzip
+        self.queue: asyncio.Queue[Optional[dict]] = asyncio.Queue(maxsize=max_queue)
+        self.task: Optional[asyncio.Task] = None
+        self.dropped_samples = 0
+
+    async def start(self):
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.task = asyncio.create_task(self._writer_loop(), name="telemetry-writer")
+
+    async def stop(self):
+        if not self.task:
+            return
+        try:
+            self.queue.put_nowait(None)
+        except asyncio.QueueFull:
+            await self.queue.put(None)
+        await self.task
+        self.task = None
+
+    def try_enqueue(self, record: dict):
+        try:
+            self.queue.put_nowait(record)
+        except asyncio.QueueFull:
+            self.dropped_samples += 1
+
+    def _current_file(self) -> Path:
+        return self.log_dir / "engine-telemetry-current.jsonl"
+
+    def _rotate_target(self) -> Path:
+        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        return self.log_dir / f"engine-telemetry-{ts}.jsonl"
+
+    def _rotated_files(self) -> list[Path]:
+        files = sorted(
+            self.log_dir.glob("engine-telemetry-*.jsonl*"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        return [p for p in files if p.name != "engine-telemetry-current.jsonl"]
+
+    def _prune(self):
+        files = self._rotated_files()
+        for old in files[self.max_files:]:
+            try:
+                old.unlink(missing_ok=True)
+            except Exception as exc:
+                log.warning("Telemetry prune failed for %s: %s", old, exc)
+        files = self._rotated_files()
+        total_bytes = sum(p.stat().st_size for p in files)
+        for old in reversed(files):
+            if total_bytes <= self.max_total_bytes:
+                break
+            try:
+                size = old.stat().st_size
+                old.unlink(missing_ok=True)
+                total_bytes -= size
+            except Exception as exc:
+                log.warning("Telemetry size-prune failed for %s: %s", old, exc)
+
+    def _rotate_file(self):
+        current = self._current_file()
+        if not current.exists() or current.stat().st_size == 0:
+            return
+        target = self._rotate_target()
+        current.rename(target)
+        if self.use_gzip:
+            gz_target = target.with_suffix(target.suffix + ".gz")
+            with target.open("rb") as src, gzip.open(gz_target, "wb", compresslevel=1) as dst:
+                dst.write(src.read())
+            target.unlink(missing_ok=True)
+        self._prune()
+
+    async def _writer_loop(self):
+        current = self._current_file()
+        f = current.open("a", encoding="utf-8")
+        try:
+            while True:
+                record = await self.queue.get()
+                if record is None:
+                    break
+                if self.dropped_samples:
+                    record["logger_dropped_samples"] = self.dropped_samples
+                    self.dropped_samples = 0
+                f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+                f.flush()
+                if current.stat().st_size >= self.rotate_bytes:
+                    f.close()
+                    self._rotate_file()
+                    current = self._current_file()
+                    f = current.open("a", encoding="utf-8")
+        except Exception as exc:
+            log.error("Telemetry writer crashed: %s", exc)
+        finally:
+            try:
+                f.flush()
+            except Exception:
+                pass
+            try:
+                f.close()
+            except Exception:
+                pass
+            # Rotate at shutdown so the log remains compact and archive-like.
+            try:
+                self._rotate_file()
+            except Exception as exc:
+                log.warning("Telemetry shutdown rotate failed: %s", exc)
+
+
+def _build_telemetry_record() -> dict:
+    return {
+        "ts_utc": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+        "tick": state.global_tick,
+        "engine": {
+            "connected": state.engine.connected,
+            "ident": state.engine.ident,
+            "error": state.engine.error,
+            "data": copy.deepcopy(state.engine.last_data),
+        },
+        "trip": copy.deepcopy(state.trip),
+        "calibration": copy.deepcopy(state.calibration),
+    }
 
 
 # ── ECU polling loop ───────────────────────────────────────────────────────────
@@ -134,6 +302,8 @@ async def ecu_poll_loop():
             _update_trip_state(data)
             state.engine.tick += 1
             state.global_tick += 1
+            if telemetry_logger and ECU_LOG_ENABLED:
+                telemetry_logger.try_enqueue(_build_telemetry_record())
             await _broadcast()
 
         except KW1281Error as e:
@@ -187,11 +357,14 @@ async def _demo_tick():
         state.engine.fault_codes = [
             {"code": "P0130", "desc": "Lambdasonde — Signal außerhalb Bereich", "status": "gespeichert"},
         ]
-        
+    if telemetry_logger and ECU_LOG_ENABLED:
+        telemetry_logger.try_enqueue(_build_telemetry_record())
+
     await _broadcast()
 
 
 async def _broadcast():
+    pi_temp_c = _read_pi_temp_c()
     msg = json.dumps({
         "type":    "data",
         "tick":    state.global_tick,
@@ -203,6 +376,7 @@ async def _broadcast():
             "faults":  state.engine.fault_codes,
             "trip":    state.trip,
             "calibration": state.calibration,
+            "pi_temp_c": pi_temp_c,
             "tick":    state.engine.tick
         },
         "abs": {
@@ -230,6 +404,16 @@ def _get_speed_kmh(data: dict) -> tuple[Optional[float], str]:
     if state.gps_speed_kmh is not None and (time.time() - state.gps_speed_ts) <= 5.0:
         return float(state.gps_speed_kmh), "GPS"
     return None, "N/A"
+
+
+def _read_pi_temp_c() -> Optional[float]:
+    """Read Raspberry Pi SoC temperature in Celsius, if available."""
+    try:
+        raw = Path("/sys/class/thermal/thermal_zone0/temp").read_text(encoding="utf-8").strip()
+        milli_c = int(raw)
+        return round(milli_c / 1000.0, 1)
+    except Exception:
+        return None
 
 
 def _update_trip_state(data: dict):
@@ -338,8 +522,33 @@ async def _broadcast_error(msg: str, ecu_type: str = "engine"):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global telemetry_logger
+    if ECU_LOG_ENABLED:
+        telemetry_logger = TelemetryLogger(
+            log_dir=ECU_LOG_DIR,
+            rotate_mb=ECU_LOG_ROTATE_MB,
+            max_files=ECU_LOG_MAX_FILES,
+            max_total_mb=ECU_LOG_MAX_TOTAL_MB,
+            max_queue=ECU_LOG_MAX_QUEUE,
+            use_gzip=ECU_LOG_GZIP,
+        )
+        await telemetry_logger.start()
+        log.info(
+            "Telemetry logging enabled: dir=%s rotate_mb=%s max_files=%s max_total_mb=%s max_queue=%s gzip=%s",
+            ECU_LOG_DIR,
+            ECU_LOG_ROTATE_MB,
+            ECU_LOG_MAX_FILES,
+            ECU_LOG_MAX_TOTAL_MB,
+            ECU_LOG_MAX_QUEUE,
+            ECU_LOG_GZIP,
+        )
+    else:
+        log.info("Telemetry logging disabled via ECU_LOG_ENABLED=0")
     asyncio.create_task(ecu_poll_loop())
     yield
+    if telemetry_logger:
+        await telemetry_logger.stop()
+        telemetry_logger = None
     if ecu_engine:
         try: ecu_engine.disconnect()
         except: pass
@@ -389,6 +598,9 @@ def api_status():
     return {
         "engine_connected": state.engine.connected,
         "engine_ident":     state.engine.ident,
+        "engine_error":     state.engine.error,
+        "engine_data":      _compact_engine_data(),
+        "pi_temp_c":        _read_pi_temp_c(),
         "global_tick":      state.global_tick,
         "clients":          len(clients),
         "trip":             state.trip,

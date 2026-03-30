@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vordergrund-CLI: KW1281-Handshake + optionale Messwertblöcke — kein Webserver, kein Port 8000.
+Vordergrund-CLI: KW1281-Handshake + optionale Messwertblöcke — kein Webserver.
 
 Beispiele:
   python app/ecu_trace.py

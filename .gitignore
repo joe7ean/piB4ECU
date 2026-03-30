@@ -17,6 +17,8 @@ env/
 logs/
 *.log
 *.jsonl
+*.jsonl.gz
+analysis/out/
 
 # Local/editor state
 .cursor/
@@ -25,3 +27,7 @@ logs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local pip wheel caches (offline installs)
+wheelhouse/
+app/wheelhouse/

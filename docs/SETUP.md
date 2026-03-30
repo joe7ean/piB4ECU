@@ -1,6 +1,6 @@
 # Passat B4 ECU Dashboard - Setup (Raspberry Pi Zero 2W)
 
-Diese Anleitung richtet das Projekt auf einem Raspberry Pi mit Standard-Port `80` ein.
+Diese Anleitung richtet das Projekt auf einem Raspberry Pi mit Standard-Port `1994` ein.
 
 ## Voraussetzungen
 
@@ -49,8 +49,8 @@ python app/server.py
 
 Aufruf:
 
-- `http://localhost`
-- `http://<raspi-ip>`
+- `http://localhost:1994`
+- `http://<raspi-ip>:1994`
 
 ## 5) Vor Hotspot: ECU-Verbindung gezielt mit `ecu_trace.py` pruefen
 
@@ -74,7 +74,7 @@ Hinweis fuer andere Motor-/Steuergeraetevarianten:
 - Wenn dein Steuergeraet nicht auf Standardwerte reagiert, zuerst hier debuggen (Port, Baud, Timing, Versuche).
 - Fuer abweichende ECU-Adressen/Blockinhalte kannst du danach gezielt `app/kw1281.py` bzw. die Adresse in `app/ecu_trace.py` anpassen.
 
-## 6) Autostart mit systemd (Port 80)
+## 6) Autostart mit systemd
 
 Service-Datei erstellen:
 
@@ -88,8 +88,14 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/piB4ECU
-Environment=ECU_HTTP_PORT=80
-AmbientCapabilities=CAP_NET_BIND_SERVICE
+Environment=ECU_HTTP_PORT=1994
+Environment=ECU_LOG_ENABLED=1
+Environment=ECU_LOG_DIR=/home/pi/piB4ECU/logs
+Environment=ECU_LOG_ROTATE_MB=25
+Environment=ECU_LOG_MAX_FILES=12
+Environment=ECU_LOG_MAX_TOTAL_MB=300
+Environment=ECU_LOG_MAX_QUEUE=2000
+Environment=ECU_LOG_GZIP=1
 ExecStart=/home/pi/piB4ECU/.venv/bin/python app/server.py
 Restart=always
 RestartSec=5
@@ -100,6 +106,17 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 ```
+
+Optional Port `80` verwenden:
+
+- `Environment=ECU_HTTP_PORT=80` setzen
+- `AmbientCapabilities=CAP_NET_BIND_SERVICE` zusaetzlich aktivieren
+
+Telemetry-Retention anpassen (Beispiele):
+
+- Weniger Speicher: `ECU_LOG_ROTATE_MB=10`, `ECU_LOG_MAX_FILES=8`
+- Logging aus: `ECU_LOG_ENABLED=0`
+- Eigener Pfad: `ECU_LOG_DIR=/mnt/usb/piB4ECU-logs`
 
 Aktivieren und starten:
 
@@ -118,7 +135,7 @@ journalctl -u passat-ecu -f
 
 ## 7) Zugriff vom Handy
 
-- Im selben Netzwerk: `http://<raspi-ip>`
+- Im selben Netzwerk: `http://<raspi-ip>:1994`
 - Optional als PWA speichern: Safari -> Teilen -> "Zum Home-Bildschirm"
 
 ## 8) Hotspot-Betrieb im Auto
@@ -145,6 +162,29 @@ Exaktes Release-Tag deployen:
 ```bash
 cd ~/piB4ECU
 ./scripts/update.sh v1.0.0-alpha.1
+```
+
+Falls die Uhr nach Stromverlust falsch ist:
+
+```bash
+cd ~/piB4ECU
+./scripts/update.sh --set-time "2026-03-26 14:35:00"
+```
+
+Oder Zeit direkt vom verbundenen Laptop per SSH mitgeben:
+
+```bash
+ssh joe@192.168.4.1 "cd /home/joe/passat_ecu && CALLER_UTC='$(date -u +%Y-%m-%d\ %H:%M:%S)' ./scripts/update.sh --set-time-from-ssh"
+```
+
+Hinweis:
+
+- Ohne `--set-time` versucht `update.sh` bei deutlich falscher Zeit eine automatische Sync ueber HTTP Date Header (wenn Internet verfuegbar ist).
+- Ohne Internet kannst du die UTC-Zeit vom Laptop mitgeben, z. B.:
+
+```bash
+NOW_UTC="$(date -u '+%Y-%m-%d %H:%M:%S')"
+ssh joe@192.168.4.1 "cd /home/joe/passat_ecu && ./scripts/update.sh --set-time \"$NOW_UTC\""
 ```
 
 Rollback auf zuvor installierte Version:

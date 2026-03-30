@@ -6,7 +6,7 @@ Dieses Runbook beschreibt die Schritte, um den Raspberry Pi Zero 2W (`passatpi`)
 
 - Der Raspi sendet ein WLAN `PassatECU`.
 - Dein Handy/PC verbindet sich mit dem WLAN.
-- Dashboard ist erreichbar unter `http://192.168.4.1:8000`.
+- Dashboard ist erreichbar unter `http://192.168.4.1:1994`.
 - Der KKL/K-Line Adapter bleibt kabelgebunden am Raspi.
 
 ## Vorbedingungen (empfohlen)
@@ -97,7 +97,7 @@ sudo reboot
 ## Verbindungstest im Auto
 
 1. Handy verbindet sich mit `PassatECU`
-2. Browser -> `http://192.168.4.1:8000`
+2. Browser -> `http://192.168.4.1:1994`
 3. In der `passat-ecu.service` Ausgabe sollten periodisch ECU-Requests / mögliche Timeouts auftauchen, bis die ECU wirklich verbunden ist.
 
 ## Recovery (wenn Hotspot nicht anspringt)

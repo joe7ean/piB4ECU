@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+- `scripts/pib4ecu-net-mode.sh` to switch between car (hotspot), home (client Wi-Fi), and usb (workshop) network profiles.
+- `docs/USB_GADGET.md` for USB Ethernet gadget setup on Pi Zero 2W.
+
 ### Changed
 - Default HTTP port is now `1994` (still overridable via `ECU_HTTP_PORT`, e.g. `80` for reverse-proxy setups).
 

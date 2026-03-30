@@ -115,6 +115,8 @@ python tools/telemetry_viewer.py --log-dir logs --run-filter "20260327" plot-met
 - `docs/OLED.md` - OLED Mini-Display Setup (Software, Service, Layout)
 - `docs/OLED_HARDWARE.md` - OLED Verdrahtung (Pi Pins, I2C, Spannung)
 - `docs/HOTSPOT.md` - Hotspot-Betrieb im Auto
+- `docs/USB_GADGET.md` - USB-Ethernet-Gadget (Werkstatt ohne WLAN)
+- `scripts/pib4ecu-net-mode.sh` - Umschalten car / home / usb (siehe `docs/SETUP.md`)
 - `docs/MEASURING_BLOCKS.md` - Dokumentierte Messwertbloecke
 - `CHANGELOG.md` - Aenderungshistorie und Releases
 

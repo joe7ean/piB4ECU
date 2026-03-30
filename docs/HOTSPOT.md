@@ -14,6 +14,19 @@ Dieses Runbook beschreibt die Schritte, um den Raspberry Pi Zero 2W (`passatpi`)
 - Dashboard/Server läuft bereits als `systemd` Service (`passat-ecu.service`) im Heimnetz.
 - USB-Serial Device ist vorhanden, z.B. `/dev/ttyUSB0`.
 
+## Moduswechsel (Auto vs. Heimnetz)
+
+Nach der Einrichtung kannst du zwischen **Hotspot (Auto)** und **normalem WLAN-Client (Werkstatt/Updates)** umschalten:
+
+```bash
+cd ~/piB4ECU
+sudo ./scripts/pib4ecu-net-mode.sh car    # Fahrzeug / Hotspot
+sudo ./scripts/pib4ecu-net-mode.sh home  # Heim-WLAN (NetworkManager oder dhcpcd)
+sudo ./scripts/pib4ecu-net-mode.sh status
+```
+
+Details und USB-Werkstatt-Modus: `docs/USB_GADGET.md`. Nach dem Wechsel **Reboot** empfohlen.
+
 ## Hotspot einrichten (mit Auto-Interface-Erkennung)
 
 ### 1) WLAN-Interface ermitteln
@@ -101,6 +114,14 @@ sudo reboot
 3. In der `passat-ecu.service` Ausgabe sollten periodisch ECU-Requests / mögliche Timeouts auftauchen, bis die ECU wirklich verbunden ist.
 
 ## Recovery (wenn Hotspot nicht anspringt)
+
+```bash
+cd ~/piB4ECU
+sudo ./scripts/pib4ecu-net-mode.sh home
+sudo reboot
+```
+
+Oder manuell:
 
 ```bash
 sudo systemctl disable --now hostapd dnsmasq

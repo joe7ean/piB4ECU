@@ -142,6 +142,20 @@ journalctl -u passat-ecu -f
 
 Die Hotspot-Einrichtung ist in `docs/HOTSPOT.md` beschrieben.
 
+### Netzwerk-Modi (Auto / Werkstatt)
+
+- **`car`** — WLAN als Access Point (`PassatECU`), wie in `docs/HOTSPOT.md`.
+- **`home`** — Hotspot aus, Verbindung ins Heim-WLAN (z.B. für `apt`/`pip`).
+- **`usb`** — Hotspot und typischer Client-Stack aus; für **USB-Ethernet-Gadget** am Laptop (`docs/USB_GADGET.md`).
+
+```bash
+cd ~/piB4ECU
+sudo ./scripts/pib4ecu-net-mode.sh status
+sudo ./scripts/pib4ecu-net-mode.sh home   # vor Updates
+sudo ./scripts/pib4ecu-net-mode.sh car    # zurück ins Auto
+sudo reboot   # nach Moduswechsel empfohlen
+```
+
 ## 9) OTA Update im Auto (Tag-basiert + Rollback)
 
 Empfohlener Ablauf:

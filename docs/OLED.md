@@ -60,7 +60,10 @@ Optional environment variables:
 - `ECU_OLED_BOOTING_S` (default `4.0`)
 - `ECU_OLED_HTTP_TIMEOUT_S` (default `1.2`)
 - `ECU_OLED_TEST_CYCLE=1` (still supported) — same as `--test`
-- `ECU_OLED_TEST_STEP_S=2.0` — per-screen duration in test mode (overridable with `--test-step-s`)
+- `ECU_OLED_TEST_STEP_S` — **base** seconds per test slide (default `4.0`); each phase uses a multiplier so nothing “flashes” too briefly (overridable with `--test-step-s`)
+- `ECU_OLED_TEST_BLANK_BEFORE_S` — seconds of **fully blank** display before the first slide (default `1.0`; CLI `--test-blank-s`)
+- `ECU_OLED_TEST_DWELL_MIN_S` — minimum dwell per slide after multipliers (default `1.25`)
+- `ECU_OLED_TEST_PHASE_MULT` — optional six comma-separated multipliers for phases `BOOTING,HOME_NO_OBD,ECU_car,LIVE,ERR,ECU_home` (defaults built in)
 
 ### Status test mode (for layout tuning)
 
@@ -69,10 +72,16 @@ On the Pi, from the repo directory:
 ```bash
 source .venv/bin/activate
 python tools/oled_status.py --test
-# optional: python tools/oled_status.py --test --test-step-s 2.0
+# optional: python tools/oled_status.py --test --test-step-s 5 --test-blank-s 1.5
 ```
 
 Cycle includes: `BOOTING`, `HOME/NO OBD`, `ECU CONNECT`, `LIVE`, and `ERR`.
+
+The script **clears the panel** for `ECU_OLED_TEST_BLANK_BEFORE_S` before the cycle (so e.g. `HOME/NO OBD` from normal mode is gone cleanly). On exit (**Ctrl+C** or process end) it **clears the panel again**; turn normal operation back on with:
+
+```bash
+sudo systemctl start oled-display
+```
 
 **systemd without editing unit files:** stop the normal service, run test in a shell, then start the service again when done:
 

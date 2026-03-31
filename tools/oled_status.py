@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+from contextlib import suppress
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -37,7 +38,13 @@ DEFAULT_URL = f"http://127.0.0.1:{ECU_HTTP_PORT}/api/status"
 STATUS_URL = os.environ.get("ECU_OLED_URL", DEFAULT_URL)
 NET_MODE_FILE = Path("/etc/pib4ecu/net-mode")
 _TEST_FLAG_VALUES = {"1", "true", "yes", "on"}
-_DEFAULT_TEST_STEP_S = float(os.environ.get("ECU_OLED_TEST_STEP_S", "2.0"))
+# Base seconds per test slide; each phase multiplies this (see _test_phase_dwell_s).
+_DEFAULT_TEST_STEP_S = float(os.environ.get("ECU_OLED_TEST_STEP_S", "4.0"))
+_TEST_DWELL_MIN_S = float(os.environ.get("ECU_OLED_TEST_DWELL_MIN_S", "1.25"))
+# Pause with display fully blank before the first test frame (clean switch from prior content).
+_TEST_BLANK_BEFORE_S = float(os.environ.get("ECU_OLED_TEST_BLANK_BEFORE_S", "1.0"))
+# Relative length per phase (cycle 0..5): BOOTING, HOME/NO OBD, ECU car, LIVE, ERR, ECU home
+_TEST_PHASE_MULT_DEFAULT: tuple[float, ...] = (1.35, 1.05, 1.05, 1.45, 1.2, 1.05)
 
 
 def _env_test_cycle_enabled() -> bool:
@@ -56,7 +63,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         metavar="SEC",
-        help=f"Seconds per screen in --test mode (default {_DEFAULT_TEST_STEP_S}).",
+        help=f"Base seconds per test slide before per-phase multipliers (default {_DEFAULT_TEST_STEP_S}).",
+    )
+    p.add_argument(
+        "--test-blank-s",
+        type=float,
+        default=None,
+        metavar="SEC",
+        help=f"Show blank display this long before first test slide (default {_TEST_BLANK_BEFORE_S}; env ECU_OLED_TEST_BLANK_BEFORE_S).",
     )
     return p.parse_args(argv)
 
@@ -107,6 +121,31 @@ def _looks_like_no_obd_error(err: str) -> bool:
         "/dev/serial/by-id",
     )
     return any(p in text for p in patterns)
+
+
+def _parse_test_phase_mults() -> tuple[float, ...]:
+    raw = os.environ.get("ECU_OLED_TEST_PHASE_MULT", "").strip()
+    if not raw:
+        return _TEST_PHASE_MULT_DEFAULT
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    try:
+        vals = tuple(float(x) for x in parts)
+    except ValueError:
+        return _TEST_PHASE_MULT_DEFAULT
+    if len(vals) != 6:
+        return _TEST_PHASE_MULT_DEFAULT
+    return vals
+
+
+def _test_phase_dwell_s(phase_index: int, base_step_s: float) -> float:
+    mults = _parse_test_phase_mults()
+    m = mults[phase_index % 6]
+    return max(_TEST_DWELL_MIN_S, float(base_step_s) * m)
+
+
+def _oled_blank(display: object) -> None:
+    display.fill(0)
+    display.show()
 
 
 def _test_cycle_status(step: int) -> Optional[dict]:
@@ -455,6 +494,7 @@ def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
     test_cycle = bool(args.test) or _env_test_cycle_enabled()
     test_step_s = args.test_step_s if args.test_step_s is not None else _DEFAULT_TEST_STEP_S
+    test_blank_before_s = args.test_blank_s if args.test_blank_s is not None else _TEST_BLANK_BEFORE_S
 
     try:
         import board
@@ -482,23 +522,33 @@ def main(argv: list[str] | None = None) -> None:
     seen_status_once = False
 
     cycle_step = 0
-    while True:
+    try:
         if test_cycle:
-            status = _test_cycle_status(cycle_step)
-            seen_status_once = status is not None
-            booting = cycle_step == 0
+            _oled_blank(display)
+            time.sleep(max(0.0, test_blank_before_s))
+
+        while True:
+            if test_cycle:
+                status = _test_cycle_status(cycle_step)
+                seen_status_once = status is not None
+                booting = cycle_step == 0
+                phase = cycle_step % 6
+                _render_status(display, ttf_path, bitmap_font, status, booting)
+                cycle_step += 1
+                time.sleep(_test_phase_dwell_s(phase, test_step_s))
+                continue
+
+            status = _fetch_status(STATUS_URL, HTTP_TIMEOUT_S)
+            if status is not None:
+                seen_status_once = True
+
+            booting = (time.time() - start) < BOOTING_SECONDS and not seen_status_once
             _render_status(display, ttf_path, bitmap_font, status, booting)
-            cycle_step += 1
-            time.sleep(max(0.5, test_step_s))
-            continue
-
-        status = _fetch_status(STATUS_URL, HTTP_TIMEOUT_S)
-        if status is not None:
-            seen_status_once = True
-
-        booting = (time.time() - start) < BOOTING_SECONDS and not seen_status_once
-        _render_status(display, ttf_path, bitmap_font, status, booting)
-        time.sleep(POLL_INTERVAL_S)
+            time.sleep(POLL_INTERVAL_S)
+    finally:
+        if test_cycle:
+            with suppress(Exception):
+                _oled_blank(display)
 
 
 if __name__ == "__main__":

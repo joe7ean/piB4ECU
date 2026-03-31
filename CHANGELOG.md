@@ -17,6 +17,7 @@ All notable changes to this project are documented in this file.
 - OLED `--test` mode: longer default base dwell (`ECU_OLED_TEST_STEP_S` default 4s), per-phase multipliers, mandatory blank pause before cycle (`ECU_OLED_TEST_BLANK_BEFORE_S`, `--test-blank-s`), and blank on exit; optional `ECU_OLED_TEST_PHASE_MULT` / `ECU_OLED_TEST_DWELL_MIN_S`.
 - OLED single-screen test fixtures: `--test-screen NAME` and shorthand `--test-live`, `--test-home-no-obd`, etc. (holds until Ctrl+C); overrides `ECU_OLED_TEST_CYCLE` when used.
 - OLED test rendering ignores host `/etc/pib4ecu/net-mode` (fixture `net_mode` only); live two-row view vertically centers the text block on 128×32.
+- OLED: exclusive lock file so only one `oled_status.py` uses I2C (avoids flicker if service + manual test); `ECU_OLED_PAD_Y` + stricter height / `textbbox` checks to reduce bottom clipping; env `ECU_OLED_LOCK_*`, `ECU_OLED_PAD_Y`.
 
 ## [1.0.0-alpha.1] - 2026-03-26
 

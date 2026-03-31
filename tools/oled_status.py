@@ -10,6 +10,7 @@ Layout goals:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import sys
@@ -25,6 +26,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 OLED_WIDTH = 128
 OLED_HEIGHT = 32
+# Extra vertical slack so descenders / bbox mismatch do not clip at the bottom edge.
+OLED_PAD_Y = int(os.environ.get("ECU_OLED_PAD_Y", "2"))
+OLED_INNER_H = OLED_HEIGHT - OLED_PAD_Y
 LEFT_RIGHT_MARGIN = int(os.environ.get("ECU_OLED_MARGIN_X", "1"))
 LINE_GAP = int(os.environ.get("ECU_OLED_LINE_GAP", "1"))
 OLED_TTF_MAX_PT = int(os.environ.get("ECU_OLED_TTF_MAX", "26"))
@@ -160,6 +164,40 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"Show blank display this long before test output (default {_TEST_BLANK_BEFORE_S}; env ECU_OLED_TEST_BLANK_BEFORE_S).",
     )
     return p.parse_args(argv)
+
+
+def _oled_lock_acquire() -> Optional[object]:
+    """Single writer for I2C OLED: avoids two processes (e.g. systemd + manual --test) fighting."""
+    if os.environ.get("ECU_OLED_LOCK_DISABLED", "").strip().lower() in _TEST_FLAG_VALUES:
+        return None
+    path = os.environ.get("ECU_OLED_LOCK_PATH", "/tmp/pib4ecu-oled-display.lock")
+    fp = open(path, "a+", encoding="utf-8")
+    try:
+        fcntl.flock(fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fp.close()
+        print(
+            f"OLED busy (lock: {path}). Stop the other process first, e.g.\n"
+            "  sudo systemctl stop oled-display\n"
+            "before running a second oled_status.py (--test / --test-live). "
+            "Override (not recommended): ECU_OLED_LOCK_DISABLED=1",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from None
+    with suppress(OSError):
+        fp.seek(0)
+        fp.truncate()
+        fp.write(f"{os.getpid()}\n")
+        fp.flush()
+    return fp
+
+
+def _oled_lock_release(lock_fp: Optional[object]) -> None:
+    if lock_fp is None:
+        return
+    with suppress(Exception):
+        fcntl.flock(lock_fp.fileno(), fcntl.LOCK_UN)
+        lock_fp.close()
 
 
 def _fetch_status(url: str, timeout: float) -> Optional[dict]:
@@ -307,7 +345,8 @@ def max_font_size_for_lines(
             heights.append(h)
             widths.append(w)
         total_h = sum(heights) + gap * max(0, len(lines) - 1)
-        if max(widths) <= max_width and total_h <= max_height:
+        cap_h = min(max_height, OLED_INNER_H)
+        if max(widths) <= max_width and total_h <= cap_h:
             return font, pt
     return None
 
@@ -338,13 +377,14 @@ def _draw_single_line_centered_fit(
     max_height: int,
 ) -> None:
     inner_w = min(max_width, OLED_WIDTH - 2 * LEFT_RIGHT_MARGIN)
+    cap_h = min(max_height, OLED_INNER_H)
     if ttf_path:
         for pt in range(OLED_TTF_MAX_PT, OLED_TTF_MIN_PT - 1, -1):
             font = _try_truetype(ttf_path, pt)
             if font is None:
                 continue
             w, h = _line_metrics(draw, text, font)
-            if w <= inner_w and h <= max_height:
+            if w <= inner_w and h <= cap_h:
                 x = max(0, (OLED_WIDTH - w) // 2)
                 y = max(0, (OLED_HEIGHT - h) // 2)
                 draw.text((x, y), text, font=font, fill=255)
@@ -365,12 +405,12 @@ def _draw_home_no_obd(draw: ImageDraw.ImageDraw, ttf_path: Optional[str], bitmap
             if font is None:
                 continue
             w, h = _line_metrics(draw, one_line, font)
-            if w <= inner_w and h <= OLED_HEIGHT:
+            if w <= inner_w and h <= OLED_INNER_H:
                 x = max(0, (OLED_WIDTH - w) // 2)
                 y = max(0, (OLED_HEIGHT - h) // 2)
                 draw.text((x, y), one_line, font=font, fill=255)
                 return
-        pair = max_font_size_for_lines(draw, ttf_path, ["HOME", "NO OBD"], inner_w, OLED_HEIGHT)
+        pair = max_font_size_for_lines(draw, ttf_path, ["HOME", "NO OBD"], inner_w, OLED_INNER_H)
         if pair:
             _draw_lines_centered_vertical(draw, ["HOME", "NO OBD"], pair[0])
             return
@@ -393,7 +433,7 @@ def _draw_err_block(
             w_t, h_t = _line_metrics(draw, title, t_font)
             if w_t > OLED_WIDTH - 2:
                 continue
-            rem_h = OLED_HEIGHT - h_t - LINE_GAP
+            rem_h = OLED_INNER_H - h_t - LINE_GAP
             if rem_h < OLED_TTF_MIN_PT:
                 continue
             for m_pt in range(min(t_pt - 1, 15), OLED_TTF_MIN_PT - 1, -1):
@@ -405,7 +445,7 @@ def _draw_err_block(
                 if h_m > rem_h or w_m > inner_w:
                     continue
                 total = h_t + LINE_GAP + h_m
-                if total <= OLED_HEIGHT:
+                if total <= OLED_INNER_H:
                     y0 = max(0, (OLED_HEIGHT - total) // 2)
                     x_t = max(0, (OLED_WIDTH - w_t) // 2)
                     draw.text((x_t, y0), title, font=t_font, fill=255)
@@ -487,14 +527,20 @@ def _render_live_two_row(
             if cw > inner:
                 line2 = _trim_to_width(draw, line2, font, inner)
                 cw, ch = _line_metrics(draw, line2, font)
-            if h1 + LINE_GAP + ch > OLED_HEIGHT:
+            if h1 + LINE_GAP + ch > OLED_INNER_H:
                 continue
             block_h = h1 + LINE_GAP + ch
             y_top = max(0, (OLED_HEIGHT - block_h) // 2)
+            y2 = y_top + h1 + LINE_GAP
+            x2 = max(0, (OLED_WIDTH - cw) // 2)
+            bb_l = draw.textbbox((LEFT_RIGHT_MARGIN, y_top), left, font=font)
+            bb_r = draw.textbbox((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y_top), right, font=font)
+            bb_2 = draw.textbbox((x2, y2), line2, font=font)
+            if max(bb_l[3], bb_r[3], bb_2[3]) > OLED_HEIGHT - 1:
+                continue
             draw.text((LEFT_RIGHT_MARGIN, y_top), left, font=font, fill=255)
             draw.text((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y_top), right, font=font, fill=255)
-            y2 = y_top + h1 + LINE_GAP
-            draw.text((max(0, (OLED_WIDTH - cw) // 2), y2), line2, font=font, fill=255)
+            draw.text((x2, y2), line2, font=font, fill=255)
             return
 
     font = bitmap_font
@@ -504,12 +550,16 @@ def _render_live_two_row(
     line2 = f"{primary} {extra}".strip() if extra else primary
     line2 = _trim_to_width(draw, line2, font, inner)
     cw, ch = _line_metrics(draw, line2, font)
+    if h1 + LINE_GAP + ch > OLED_INNER_H:
+        line2 = _trim_to_width(draw, primary, font, inner)
+        cw, ch = _line_metrics(draw, line2, font)
     block_h = h1 + LINE_GAP + ch
     y_top = max(0, (OLED_HEIGHT - block_h) // 2)
+    y2 = y_top + h1 + LINE_GAP
+    x2 = max(0, (OLED_WIDTH - cw) // 2)
     draw.text((LEFT_RIGHT_MARGIN, y_top), left, font=font, fill=255)
     draw.text((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y_top), right, font=font, fill=255)
-    y2 = y_top + h1 + LINE_GAP
-    draw.text((max(0, (OLED_WIDTH - cw) // 2), y2), line2, font=font, fill=255)
+    draw.text((x2, y2), line2, font=font, fill=255)
 
 
 def _render_status(
@@ -567,63 +617,67 @@ def main(argv: list[str] | None = None) -> None:
     test_step_s = args.test_step_s if args.test_step_s is not None else _DEFAULT_TEST_STEP_S
     test_blank_before_s = args.test_blank_s if args.test_blank_s is not None else _TEST_BLANK_BEFORE_S
 
+    lock_fp = _oled_lock_acquire()
     try:
-        import board
-        import busio
-        import adafruit_ssd1306
-    except ModuleNotFoundError as e:
-        if getattr(e, "name", None) in {"board", "busio", "adafruit_ssd1306"}:
-            print(
-                "Missing OLED/I2C Python deps (e.g. adafruit-blinka). "
-                "Install on the Pi: pip install -r requirements-oled.txt — "
-                "this script does not run on a normal PC without hardware stack.",
-                file=sys.stderr,
-            )
-            raise SystemExit(1) from e
-        raise
+        try:
+            import board
+            import busio
+            import adafruit_ssd1306
+        except ModuleNotFoundError as e:
+            if getattr(e, "name", None) in {"board", "busio", "adafruit_ssd1306"}:
+                print(
+                    "Missing OLED/I2C Python deps (e.g. adafruit-blinka). "
+                    "Install on the Pi: pip install -r requirements-oled.txt — "
+                    "this script does not run on a normal PC without hardware stack.",
+                    file=sys.stderr,
+                )
+                raise SystemExit(1) from e
+            raise
 
-    i2c = busio.I2C(board.SCL, board.SDA)
-    display = adafruit_ssd1306.SSD1306_I2C(OLED_WIDTH, OLED_HEIGHT, i2c, addr=0x3C)
-    display.fill(0)
-    display.show()
-    ttf_path = _resolve_ttf_path()
-    bitmap_font = ImageFont.load_default()
+        i2c = busio.I2C(board.SCL, board.SDA)
+        display = adafruit_ssd1306.SSD1306_I2C(OLED_WIDTH, OLED_HEIGHT, i2c, addr=0x3C)
+        display.fill(0)
+        display.show()
+        ttf_path = _resolve_ttf_path()
+        bitmap_font = ImageFont.load_default()
 
-    start = time.time()
-    seen_status_once = False
+        start = time.time()
+        seen_status_once = False
 
-    cycle_step = 0
-    try:
-        if test_mode:
-            _oled_blank(display)
-            time.sleep(max(0.0, test_blank_before_s))
-
-        while True:
-            if test_screen is not None:
-                status, booting = _test_screen_args(test_screen)
-                _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=False)
-                time.sleep(POLL_INTERVAL_S)
-                continue
-
-            if test_cycle:
-                status, booting = _test_cycle_phase(cycle_step)
-                phase = cycle_step % len(_TEST_CYCLE_SCREENS)
-                _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=False)
-                cycle_step += 1
-                time.sleep(_test_phase_dwell_s(phase, test_step_s))
-                continue
-
-            status = _fetch_status(STATUS_URL, HTTP_TIMEOUT_S)
-            if status is not None:
-                seen_status_once = True
-
-            booting = (time.time() - start) < BOOTING_SECONDS and not seen_status_once
-            _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=True)
-            time.sleep(POLL_INTERVAL_S)
-    finally:
-        if test_mode:
-            with suppress(Exception):
+        cycle_step = 0
+        try:
+            if test_mode:
                 _oled_blank(display)
+                time.sleep(max(0.0, test_blank_before_s))
+
+            while True:
+                if test_screen is not None:
+                    status, booting = _test_screen_args(test_screen)
+                    _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=False)
+                    time.sleep(POLL_INTERVAL_S)
+                    continue
+
+                if test_cycle:
+                    status, booting = _test_cycle_phase(cycle_step)
+                    phase = cycle_step % len(_TEST_CYCLE_SCREENS)
+                    _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=False)
+                    cycle_step += 1
+                    time.sleep(_test_phase_dwell_s(phase, test_step_s))
+                    continue
+
+                status = _fetch_status(STATUS_URL, HTTP_TIMEOUT_S)
+                if status is not None:
+                    seen_status_once = True
+
+                booting = (time.time() - start) < BOOTING_SECONDS and not seen_status_once
+                _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=True)
+                time.sleep(POLL_INTERVAL_S)
+        finally:
+            if test_mode:
+                with suppress(Exception):
+                    _oled_blank(display)
+    finally:
+        _oled_lock_release(lock_fp)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,7 @@ Optional tuning:
 - `ECU_OLED_TTF_MAX` / `ECU_OLED_TTF_MIN` — clamp largest/smallest point size tried (defaults 26 / 8).
 - `ECU_OLED_MARGIN_X` — horizontal inset in pixels (default `1`).
 - `ECU_OLED_LINE_GAP` — gap between stacked lines (default `1`).
+- `ECU_OLED_PAD_Y` — reserved pixels at the bottom when fitting text (default `2`), reduces clipping of descenders on the live two-line layout.
 
 Install fonts on Lite if needed: `sudo apt install -y fonts-dejavu-core`
 
@@ -64,6 +65,7 @@ Optional environment variables:
 - `ECU_OLED_TEST_BLANK_BEFORE_S` — seconds of **fully blank** display before the first slide (default `1.0`; CLI `--test-blank-s`)
 - `ECU_OLED_TEST_DWELL_MIN_S` — minimum dwell per slide after multipliers (default `1.25`)
 - `ECU_OLED_TEST_PHASE_MULT` — optional six comma-separated multipliers for phases `BOOTING,HOME_NO_OBD,ECU_car,LIVE,ERR,ECU_home` (defaults built in)
+- **Display lock** (default on): only one `oled_status.py` may use the panel. Lock file: `ECU_OLED_LOCK_PATH` (default `/tmp/pib4ecu-oled-display.lock`). If a second instance starts while `oled-display.service` is running, it exits with a hint to `sudo systemctl stop oled-display`. Emergency override: `ECU_OLED_LOCK_DISABLED=1` (not recommended).
 
 ### Status test mode (for layout tuning)
 
@@ -108,6 +110,10 @@ cd /path/to/piB4ECU && source .venv/bin/activate && python tools/oled_status.py 
 sudo systemctl start oled-display
 ```
 
+If the picture **flickers** between a test layout and normal “HOME / HTTP / …” content, **two processes are usually writing the same I2C OLED** (service + manual test). Stop the service first, or rely on the lock: the second process will exit unless you disabled it.
+
+Do **not** put `ECU_OLED_TEST_CYCLE=1` (or `--test`) in `oled-display.service` for day-to-day use — that forces a rotating test pattern instead of live data.
+
 ## systemd (example)
 
 Create `/etc/systemd/system/oled-display.service`:
@@ -123,6 +129,7 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/piB4ECU
 Environment=ECU_HTTP_PORT=1994
+# Do not add ECU_OLED_TEST_CYCLE here for normal operation.
 ExecStart=/home/pi/piB4ECU/.venv/bin/python tools/oled_status.py
 Restart=always
 RestartSec=2

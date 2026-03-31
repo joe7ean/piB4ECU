@@ -114,7 +114,7 @@ python tools/telemetry_viewer.py --log-dir logs --run-filter "20260327" plot-met
 - `docs/SETUP.md` - Raspberry-Pi Setup inkl. systemd Service
 - `docs/OLED.md` - OLED Mini-Display Setup (Software, Service, Layout)
 - `docs/OLED_HARDWARE.md` - OLED Verdrahtung (Pi Pins, I2C, Spannung)
-- OLED: on the Pi, `python tools/oled_status.py --test` cycles fake screens for layout checks; home-mode `NO OBD` behavior — see `docs/OLED.md`
+- OLED: on the Pi, `python tools/oled_status.py --test-live` (or `--test-screen …`) holds one fake screen; `--test` cycles all — see `docs/OLED.md`
 - `docs/HOTSPOT.md` - Hotspot-Betrieb im Auto
 - `docs/USB_GADGET.md` - USB-Ethernet-Gadget (Werkstatt ohne WLAN)
 - `scripts/pib4ecu-net-mode.sh` - Umschalten car / home / usb / auto + lock/unlock (siehe `docs/SETUP.md`)

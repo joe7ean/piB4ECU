@@ -46,31 +46,118 @@ _TEST_BLANK_BEFORE_S = float(os.environ.get("ECU_OLED_TEST_BLANK_BEFORE_S", "1.0
 # Relative length per phase (cycle 0..5): BOOTING, HOME/NO OBD, ECU car, LIVE, ERR, ECU home
 _TEST_PHASE_MULT_DEFAULT: tuple[float, ...] = (1.35, 1.05, 1.05, 1.45, 1.2, 1.05)
 
+# Fake API payloads for layout checks (same data as the former cycle steps 1..5).
+_TEST_FIXTURE_HOME_NO_OBD: dict = {
+    "engine_connected": False,
+    "engine_error": "could not open port /dev/ttyUSB0",
+    "engine_data": {},
+    "trip": {},
+    "net_mode": "home",
+}
+_TEST_FIXTURE_ECU_CONNECT_CAR: dict = {
+    "engine_connected": False,
+    "engine_error": None,
+    "engine_data": {},
+    "trip": {},
+    "net_mode": "car",
+}
+_TEST_FIXTURE_LIVE: dict = {
+    "engine_connected": True,
+    "engine_error": None,
+    "engine_data": {
+        "Kühlmitteltemperatur": {"value": 87, "unit": "C"},
+        "Spannung": {"value": 14.1, "unit": "V"},
+    },
+    "trip": {"live_l_per_100km": 7.1, "live_lph": 2.9, "speed_kmh": 41},
+    "net_mode": "car",
+}
+_TEST_FIXTURE_ERR: dict = {
+    "engine_connected": True,
+    "engine_error": "Timeout beim Lesen — ECU antwortet nicht",
+    "engine_data": {},
+    "trip": {},
+    "net_mode": "car",
+}
+_TEST_FIXTURE_ECU_CONNECT_HOME: dict = {
+    "engine_connected": False,
+    "engine_error": None,
+    "engine_data": {},
+    "trip": {},
+    "net_mode": "home",
+}
+
+# Order used by --test full cycle (no wait_http in rotation).
+_TEST_CYCLE_SCREENS: tuple[str, ...] = (
+    "booting",
+    "home_no_obd",
+    "ecu_connect_car",
+    "live",
+    "err",
+    "ecu_connect_home",
+)
+
+TEST_SCREEN_CHOICES: tuple[str, ...] = (
+    "booting",
+    "wait_http",
+    "home_no_obd",
+    "ecu_connect_car",
+    "live",
+    "err",
+    "ecu_connect_home",
+)
+
 
 def _env_test_cycle_enabled() -> bool:
     return os.environ.get("ECU_OLED_TEST_CYCLE", "").strip().lower() in _TEST_FLAG_VALUES
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="piB4ECU SSD1306 status display (runs on Raspberry Pi with I2C + Blinka).")
-    p.add_argument(
+    p = argparse.ArgumentParser(
+        description="piB4ECU SSD1306 status display (runs on Raspberry Pi with I2C + Blinka).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Single test screens (hold until Ctrl+C): --test-screen booting | wait_http | home_no_obd | "
+            "ecu_connect_car | live | err | ecu_connect_home — or shorthand --test-booting, --test-live, …\n"
+            "Full cycle: --test (or env ECU_OLED_TEST_CYCLE=1). Single-screen flags override env cycle."
+        ),
+    )
+    test_x = p.add_mutually_exclusive_group()
+    test_x.add_argument(
         "--test",
         action="store_true",
-        help="Cycle through fake display states (no HTTP). Step length: --test-step-s or ECU_OLED_TEST_STEP_S.",
+        help="Cycle through all fake states (no HTTP). Timing: --test-step-s / ECU_OLED_TEST_STEP_S.",
     )
+    test_x.add_argument(
+        "--test-screen",
+        choices=TEST_SCREEN_CHOICES,
+        default=None,
+        dest="test_screen",
+        metavar="NAME",
+        help="Show one fixture and keep it until Ctrl+C.",
+    )
+    for flag, name in (
+        ("--test-booting", "booting"),
+        ("--test-wait-http", "wait_http"),
+        ("--test-home-no-obd", "home_no_obd"),
+        ("--test-ecu-car", "ecu_connect_car"),
+        ("--test-live", "live"),
+        ("--test-err", "err"),
+        ("--test-ecu-home", "ecu_connect_home"),
+    ):
+        test_x.add_argument(flag, dest="test_screen", action="store_const", const=name, help=f"Same as --test-screen {name}.")
     p.add_argument(
         "--test-step-s",
         type=float,
         default=None,
         metavar="SEC",
-        help=f"Base seconds per test slide before per-phase multipliers (default {_DEFAULT_TEST_STEP_S}).",
+        help=f"Base seconds per --test cycle slide (default {_DEFAULT_TEST_STEP_S}); ignored for single --test-screen (uses poll interval).",
     )
     p.add_argument(
         "--test-blank-s",
         type=float,
         default=None,
         metavar="SEC",
-        help=f"Show blank display this long before first test slide (default {_TEST_BLANK_BEFORE_S}; env ECU_OLED_TEST_BLANK_BEFORE_S).",
+        help=f"Show blank display this long before test output (default {_TEST_BLANK_BEFORE_S}; env ECU_OLED_TEST_BLANK_BEFORE_S).",
     )
     return p.parse_args(argv)
 
@@ -148,52 +235,26 @@ def _oled_blank(display: object) -> None:
     display.show()
 
 
-def _test_cycle_status(step: int) -> Optional[dict]:
-    cycle = step % 6
-    if cycle == 0:
-        return None
-    if cycle == 1:
-        return {
-            "engine_connected": False,
-            "engine_error": "could not open port /dev/ttyUSB0",
-            "engine_data": {},
-            "trip": {},
-            "net_mode": "home",
-        }
-    if cycle == 2:
-        return {
-            "engine_connected": False,
-            "engine_error": None,
-            "engine_data": {},
-            "trip": {},
-            "net_mode": "car",
-        }
-    if cycle == 3:
-        return {
-            "engine_connected": True,
-            "engine_error": None,
-            "engine_data": {
-                "Kühlmitteltemperatur": {"value": 87, "unit": "C"},
-                "Spannung": {"value": 14.1, "unit": "V"},
-            },
-            "trip": {"live_l_per_100km": 7.1, "live_lph": 2.9, "speed_kmh": 41},
-            "net_mode": "car",
-        }
-    if cycle == 4:
-        return {
-            "engine_connected": True,
-            "engine_error": "Timeout beim Lesen — ECU antwortet nicht",
-            "engine_data": {},
-            "trip": {},
-            "net_mode": "car",
-        }
-    return {
-        "engine_connected": False,
-        "engine_error": None,
-        "engine_data": {},
-        "trip": {},
-        "net_mode": "home",
+def _test_screen_args(screen: str) -> tuple[Optional[dict], bool]:
+    """Return (status_dict_or_None, booting) for _render_status."""
+    if screen == "booting":
+        return None, True
+    if screen == "wait_http":
+        return None, False
+    fixtures: dict[str, dict] = {
+        "home_no_obd": _TEST_FIXTURE_HOME_NO_OBD,
+        "ecu_connect_car": _TEST_FIXTURE_ECU_CONNECT_CAR,
+        "live": _TEST_FIXTURE_LIVE,
+        "err": _TEST_FIXTURE_ERR,
+        "ecu_connect_home": _TEST_FIXTURE_ECU_CONNECT_HOME,
     }
+    data = fixtures[screen]
+    return data, False
+
+
+def _test_cycle_phase(step: int) -> tuple[Optional[dict], bool]:
+    name = _TEST_CYCLE_SCREENS[step % len(_TEST_CYCLE_SCREENS)]
+    return _test_screen_args(name)
 
 
 def _line_metrics(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> tuple[int, int]:
@@ -492,7 +553,9 @@ def _render_status(
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
-    test_cycle = bool(args.test) or _env_test_cycle_enabled()
+    test_screen: Optional[str] = args.test_screen
+    test_cycle = (bool(args.test) or _env_test_cycle_enabled()) and test_screen is None
+    test_mode = test_cycle or test_screen is not None
     test_step_s = args.test_step_s if args.test_step_s is not None else _DEFAULT_TEST_STEP_S
     test_blank_before_s = args.test_blank_s if args.test_blank_s is not None else _TEST_BLANK_BEFORE_S
 
@@ -523,16 +586,20 @@ def main(argv: list[str] | None = None) -> None:
 
     cycle_step = 0
     try:
-        if test_cycle:
+        if test_mode:
             _oled_blank(display)
             time.sleep(max(0.0, test_blank_before_s))
 
         while True:
+            if test_screen is not None:
+                status, booting = _test_screen_args(test_screen)
+                _render_status(display, ttf_path, bitmap_font, status, booting)
+                time.sleep(POLL_INTERVAL_S)
+                continue
+
             if test_cycle:
-                status = _test_cycle_status(cycle_step)
-                seen_status_once = status is not None
-                booting = cycle_step == 0
-                phase = cycle_step % 6
+                status, booting = _test_cycle_phase(cycle_step)
+                phase = cycle_step % len(_TEST_CYCLE_SCREENS)
                 _render_status(display, ttf_path, bitmap_font, status, booting)
                 cycle_step += 1
                 time.sleep(_test_phase_dwell_s(phase, test_step_s))
@@ -546,7 +613,7 @@ def main(argv: list[str] | None = None) -> None:
             _render_status(display, ttf_path, bitmap_font, status, booting)
             time.sleep(POLL_INTERVAL_S)
     finally:
-        if test_cycle:
+        if test_mode:
             with suppress(Exception):
                 _oled_blank(display)
 

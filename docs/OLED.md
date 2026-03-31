@@ -59,7 +59,7 @@ Optional environment variables:
 - `ECU_OLED_POLL_S` (default `0.8`)
 - `ECU_OLED_BOOTING_S` (default `4.0`)
 - `ECU_OLED_HTTP_TIMEOUT_S` (default `1.2`)
-- `ECU_OLED_TEST_CYCLE=1` (still supported) — same as `--test`
+- `ECU_OLED_TEST_CYCLE=1` (still supported) — same as `--test` (overridden if you pass a single-screen flag like `--test-live`)
 - `ECU_OLED_TEST_STEP_S` — **base** seconds per test slide (default `4.0`); each phase uses a multiplier so nothing “flashes” too briefly (overridable with `--test-step-s`)
 - `ECU_OLED_TEST_BLANK_BEFORE_S` — seconds of **fully blank** display before the first slide (default `1.0`; CLI `--test-blank-s`)
 - `ECU_OLED_TEST_DWELL_MIN_S` — minimum dwell per slide after multipliers (default `1.25`)
@@ -69,13 +69,25 @@ Optional environment variables:
 
 On the Pi, from the repo directory:
 
+**One screen at a time** (stays until Ctrl+C; best for tuning typography):
+
 ```bash
 source .venv/bin/activate
+python tools/oled_status.py --test-live
+# or: python tools/oled_status.py --test-screen live
+# other screens: booting, wait_http, home_no_obd, ecu_connect_car, err, ecu_connect_home
+# shorthand: --test-booting, --test-wait-http, --test-home-no-obd, --test-ecu-car, --test-err, --test-ecu-home
+```
+
+**Full cycle** (all slides in rotation):
+
+```bash
 python tools/oled_status.py --test
 # optional: python tools/oled_status.py --test --test-step-s 5 --test-blank-s 1.5
 ```
 
-Cycle includes: `BOOTING`, `HOME/NO OBD`, `ECU CONNECT`, `LIVE`, and `ERR`.
+Cycle order: `BOOTING`, `HOME/NO OBD`, `ECU CONNECT` (car), `LIVE`, `ERR`, `ECU CONNECT` (home).  
+`WAIT HTTP` is only available as a single screen (`--test-wait-http`), not in the auto cycle.
 
 The script **clears the panel** for `ECU_OLED_TEST_BLANK_BEFORE_S` before the cycle (so e.g. `HOME/NO OBD` from normal mode is gone cleanly). On exit (**Ctrl+C** or process end) it **clears the panel again**; turn normal operation back on with:
 

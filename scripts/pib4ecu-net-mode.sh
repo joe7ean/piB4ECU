@@ -54,6 +54,19 @@ wifi_iface() {
   echo "${iface}"
 }
 
+# Does not exit if wlan or iw is missing (e.g. recovery / minimal images).
+wifi_iface_optional() {
+  local candidate iface
+  for candidate in "$(command -v iw 2>/dev/null || true)" /sbin/iw /usr/sbin/iw /usr/bin/iw; do
+    if [[ -n "${candidate}" && -x "${candidate}" ]]; then
+      iface="$("${candidate}" dev 2>/dev/null | awk '$1 == "Interface" { print $2; exit }')"
+      echo "${iface}"
+      return 0
+    fi
+  done
+  echo ""
+}
+
 has_networkmanager() {
   systemctl cat NetworkManager.service >/dev/null 2>&1
 }
@@ -141,8 +154,23 @@ apply_home() {
   systemctl unmask NetworkManager 2>/dev/null || true
   if has_networkmanager; then
     systemctl enable --now NetworkManager
+    # After car/usb mode, wlan can stay down or "unmanaged" until explicitly nudged.
+    if command -v nmcli >/dev/null 2>&1; then
+      nmcli radio wifi on 2>/dev/null || true
+      local iface
+      iface="$(wifi_iface_optional)"
+      if [[ -n "${iface}" ]]; then
+        nmcli dev set "${iface}" managed yes 2>/dev/null || true
+      fi
+    fi
   else
     systemctl enable --now dhcpcd 2>/dev/null || true
+    local iface
+    iface="$(wifi_iface_optional)"
+    if [[ -n "${iface}" ]]; then
+      systemctl unmask "wpa_supplicant@${iface}.service" 2>/dev/null || true
+      systemctl enable --now "wpa_supplicant@${iface}.service" 2>/dev/null || true
+    fi
     echo "NetworkManager not installed; started dhcpcd. Configure Wi-Fi: sudo raspi-config"
   fi
 }

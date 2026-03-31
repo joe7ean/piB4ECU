@@ -119,6 +119,30 @@ sudo reboot
 
 ## Recovery (wenn Hotspot nicht anspringt)
 
+### Symptom: weder Heim-WLAN noch `PassatECU`-Hotspot
+
+Das OLED zeigt `HOME / NO OBD` nur den **gewünschten Netz-Modus** (Datei `auto`/`home`) und den **OBD-Status** — nicht, ob WLAN wirklich verbunden ist.
+
+1. Lokal am Pi (USB-Tastatur + Monitor, oder serielles Konsolenkabel), eingeloggt:
+
+```bash
+cd ~/piB4ECU
+sudo ./scripts/pib4ecu-net-mode.sh status
+```
+
+- Steht dort **`effective_mode: usb`**, war der Werkstatt-Profil aktiv: für Heimnetz **`sudo ./scripts/pib4ecu-net-mode.sh home`** (oder **`auto`**) und **`sudo reboot`**.
+- Steht **`effective_mode: home`**, aber WLAN tot: **`sudo ./scripts/pib4ecu-net-mode.sh home`** nochmal ausführen (stellt u.a. NetworkManager + WLAN wieder her), dann **`sudo reboot`**. Prüfen: **`rfkill list`**, **`ip link`**, **`nmcli dev status`**.
+
+2. Hotspot erzwingen (wenn Heim-WLAN egal ist):
+
+```bash
+cd ~/piB4ECU
+sudo ./scripts/pib4ecu-net-mode.sh car
+sudo reboot
+```
+
+### Nur Hotspot springt nicht an, Heimnetz geht
+
 ```bash
 cd ~/piB4ECU
 sudo ./scripts/pib4ecu-net-mode.sh home

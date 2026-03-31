@@ -1,7 +1,8 @@
 [Unit]
 Description=Apply piB4ECU network mode policy at boot
-After=network-pre.target
-Before=network.target
+# Run after the generic network stack is up so client Wi-Fi (NetworkManager) is not
+# left in a broken state; car/hotspot still switches stack on the next lines.
+After=network.target
 
 [Service]
 Type=oneshot

@@ -1,6 +1,6 @@
 # piB4ECU
 
-Live-Dashboard fuer VW Passat B4 ECU-Daten (KW1281/K-Line) auf Raspberry Pi.
+Live-Dashboard für VW Passat B4 und andere VW/Audi/Seat/Skoda-Modelle aus den 90ern mit KW1281/K-Line-ECU (z.B. Golf 3, Audi 80/100, Seat Toledo, Skoda Felicia) auf Raspberry Pi.
 
 ## Projektstruktur
 
@@ -114,6 +114,7 @@ python tools/telemetry_viewer.py --log-dir logs --run-filter "20260327" plot-met
 - `docs/SETUP.md` - Raspberry-Pi Setup inkl. systemd Service
 - `docs/OLED.md` - OLED Mini-Display Setup (Software, Service, Layout)
 - `docs/OLED_HARDWARE.md` - OLED Verdrahtung (Pi Pins, I2C, Spannung)
+- OLED: on the Pi, `python tools/oled_status.py --test` cycles fake screens for layout checks; home-mode `NO OBD` behavior — see `docs/OLED.md`
 - `docs/HOTSPOT.md` - Hotspot-Betrieb im Auto
 - `docs/USB_GADGET.md` - USB-Ethernet-Gadget (Werkstatt ohne WLAN)
 - `scripts/pib4ecu-net-mode.sh` - Umschalten car / home / usb / auto + lock/unlock (siehe `docs/SETUP.md`)

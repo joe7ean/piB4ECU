@@ -12,6 +12,8 @@ All notable changes to this project are documented in this file.
 ### Changed
 - Default HTTP port is now `1994` (still overridable via `ECU_HTTP_PORT`, e.g. `80` for reverse-proxy setups).
 - Network mode script now supports `auto` (OBD by-id => car, else home), `apply`, and `lock`/`unlock` maintenance flow.
+- `pib4ecu-net-mode-apply.service` runs after `network.target` (avoids breaking client Wi-Fi at boot). `apply_home` nudges NetworkManager / `wpa_supplicant` so wlan is not left disabled after car/usb.
+- OLED status script (`tools/oled_status.py`) uses system TrueType (DejaVu Bold by default) with auto-sized lines for 128×32; compact live labels (`/100`, `Lh`). Env: `ECU_OLED_FONT`, `ECU_OLED_TTF_MAX` / `ECU_OLED_TTF_MIN`, margins/gap — see `docs/OLED.md`.
 
 ## [1.0.0-alpha.1] - 2026-03-26
 

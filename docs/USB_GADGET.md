@@ -9,6 +9,12 @@ cd ~/piB4ECU
 sudo ./scripts/pib4ecu-net-mode.sh usb
 ```
 
+If you enabled the boot auto-policy (`pib4ecu-net-mode-apply.service`), keep a maintenance lock during longer workshop sessions:
+
+```bash
+sudo ./scripts/pib4ecu-net-mode.sh lock
+```
+
 Then apply the boot configuration below and **reboot**.
 
 ## Prerequisites

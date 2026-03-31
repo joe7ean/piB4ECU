@@ -22,10 +22,14 @@ Nach der Einrichtung kannst du zwischen **Hotspot (Auto)** und **normalem WLAN-C
 cd ~/piB4ECU
 sudo ./scripts/pib4ecu-net-mode.sh car    # Fahrzeug / Hotspot
 sudo ./scripts/pib4ecu-net-mode.sh home  # Heim-WLAN (NetworkManager oder dhcpcd)
+sudo ./scripts/pib4ecu-net-mode.sh auto  # OBD erkannt => car, sonst home
+sudo ./scripts/pib4ecu-net-mode.sh lock  # Wartung erzwingt home
+sudo ./scripts/pib4ecu-net-mode.sh unlock
 sudo ./scripts/pib4ecu-net-mode.sh status
 ```
 
 Details und USB-Werkstatt-Modus: `docs/USB_GADGET.md`. Nach dem Wechsel **Reboot** empfohlen.
+Fuer automatisches Verhalten nach jedem Neustart die Boot-Unit aus `deploy/systemd/pib4ecu-net-mode-apply.service` aktivieren (siehe `docs/SETUP.md`).
 
 ## Hotspot einrichten (mit Auto-Interface-Erkennung)
 

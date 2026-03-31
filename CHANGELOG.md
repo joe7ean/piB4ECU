@@ -7,9 +7,11 @@ All notable changes to this project are documented in this file.
 ### Added
 - `scripts/pib4ecu-net-mode.sh` to switch between car (hotspot), home (client Wi-Fi), and usb (workshop) network profiles.
 - `docs/USB_GADGET.md` for USB Ethernet gadget setup on Pi Zero 2W.
+- `deploy/systemd/pib4ecu-net-mode-apply.service` for boot-time network mode apply.
 
 ### Changed
 - Default HTTP port is now `1994` (still overridable via `ECU_HTTP_PORT`, e.g. `80` for reverse-proxy setups).
+- Network mode script now supports `auto` (OBD by-id => car, else home), `apply`, and `lock`/`unlock` maintenance flow.
 
 ## [1.0.0-alpha.1] - 2026-03-26
 

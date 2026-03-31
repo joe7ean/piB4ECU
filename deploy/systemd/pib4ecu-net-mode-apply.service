@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply piB4ECU network mode policy at boot
+After=network-pre.target
+Before=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -lc 'cd /home/joe/Code/piB4ECU && ./scripts/pib4ecu-net-mode.sh apply'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

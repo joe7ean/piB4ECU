@@ -489,10 +489,11 @@ def _render_live_two_row(
                 cw, ch = _line_metrics(draw, line2, font)
             if h1 + LINE_GAP + ch > OLED_HEIGHT:
                 continue
-            y1 = 0
-            draw.text((LEFT_RIGHT_MARGIN, y1), left, font=font, fill=255)
-            draw.text((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y1), right, font=font, fill=255)
-            y2 = y1 + h1 + LINE_GAP
+            block_h = h1 + LINE_GAP + ch
+            y_top = max(0, (OLED_HEIGHT - block_h) // 2)
+            draw.text((LEFT_RIGHT_MARGIN, y_top), left, font=font, fill=255)
+            draw.text((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y_top), right, font=font, fill=255)
+            y2 = y_top + h1 + LINE_GAP
             draw.text((max(0, (OLED_WIDTH - cw) // 2), y2), line2, font=font, fill=255)
             return
 
@@ -503,11 +504,12 @@ def _render_live_two_row(
     line2 = f"{primary} {extra}".strip() if extra else primary
     line2 = _trim_to_width(draw, line2, font, inner)
     cw, ch = _line_metrics(draw, line2, font)
-    y1 = 0
-    draw.text((LEFT_RIGHT_MARGIN, y1), left, font=font, fill=255)
-    draw.text((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y1), right, font=font, fill=255)
-    y2 = min(y1 + h1 + LINE_GAP, OLED_HEIGHT - ch - 1)
-    draw.text((max(0, (OLED_WIDTH - cw) // 2), max(0, y2)), line2, font=font, fill=255)
+    block_h = h1 + LINE_GAP + ch
+    y_top = max(0, (OLED_HEIGHT - block_h) // 2)
+    draw.text((LEFT_RIGHT_MARGIN, y_top), left, font=font, fill=255)
+    draw.text((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y_top), right, font=font, fill=255)
+    y2 = y_top + h1 + LINE_GAP
+    draw.text((max(0, (OLED_WIDTH - cw) // 2), y2), line2, font=font, fill=255)
 
 
 def _render_status(
@@ -516,6 +518,7 @@ def _render_status(
     bitmap_font: ImageFont.ImageFont,
     status: Optional[dict],
     booting: bool,
+    use_host_net_mode: bool = True,
 ) -> None:
     image = Image.new("1", (OLED_WIDTH, OLED_HEIGHT))
     draw = ImageDraw.Draw(image)
@@ -529,7 +532,12 @@ def _render_status(
         connected = bool(status.get("engine_connected"))
         engine_data = status.get("engine_data") or {}
         trip = status.get("trip") or {}
-        net_mode = status.get("net_mode") or _read_net_mode()
+        if use_host_net_mode:
+            raw_nm = status.get("net_mode")
+            net_mode = (raw_nm if isinstance(raw_nm, str) and raw_nm.strip() else _read_net_mode()).strip().lower()
+        else:
+            raw_nm = status.get("net_mode")
+            net_mode = raw_nm.strip().lower() if isinstance(raw_nm, str) and raw_nm.strip() else "unknown"
         is_no_obd_error = (
             isinstance(engine_error, str)
             and engine_error.strip()
@@ -593,14 +601,14 @@ def main(argv: list[str] | None = None) -> None:
         while True:
             if test_screen is not None:
                 status, booting = _test_screen_args(test_screen)
-                _render_status(display, ttf_path, bitmap_font, status, booting)
+                _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=False)
                 time.sleep(POLL_INTERVAL_S)
                 continue
 
             if test_cycle:
                 status, booting = _test_cycle_phase(cycle_step)
                 phase = cycle_step % len(_TEST_CYCLE_SCREENS)
-                _render_status(display, ttf_path, bitmap_font, status, booting)
+                _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=False)
                 cycle_step += 1
                 time.sleep(_test_phase_dwell_s(phase, test_step_s))
                 continue
@@ -610,7 +618,7 @@ def main(argv: list[str] | None = None) -> None:
                 seen_status_once = True
 
             booting = (time.time() - start) < BOOTING_SECONDS and not seen_status_once
-            _render_status(display, ttf_path, bitmap_font, status, booting)
+            _render_status(display, ttf_path, bitmap_font, status, booting, use_host_net_mode=True)
             time.sleep(POLL_INTERVAL_S)
     finally:
         if test_mode:

@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file.
 - OLED status script (`tools/oled_status.py`) uses system TrueType (DejaVu Bold by default) with auto-sized lines for 128×32; compact live labels (`/100`, `Lh`). Env: `ECU_OLED_FONT`, `ECU_OLED_TTF_MAX` / `ECU_OLED_TTF_MIN`, margins/gap — see `docs/OLED.md`.
 - OLED `--test` mode: longer default base dwell (`ECU_OLED_TEST_STEP_S` default 4s), per-phase multipliers, mandatory blank pause before cycle (`ECU_OLED_TEST_BLANK_BEFORE_S`, `--test-blank-s`), and blank on exit; optional `ECU_OLED_TEST_PHASE_MULT` / `ECU_OLED_TEST_DWELL_MIN_S`.
 - OLED single-screen test fixtures: `--test-screen NAME` and shorthand `--test-live`, `--test-home-no-obd`, etc. (holds until Ctrl+C); overrides `ECU_OLED_TEST_CYCLE` when used.
+- OLED test rendering ignores host `/etc/pib4ecu/net-mode` (fixture `net_mode` only); live two-row view vertically centers the text block on 128×32.
 
 ## [1.0.0-alpha.1] - 2026-03-26
 

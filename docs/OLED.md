@@ -89,6 +89,10 @@ python tools/oled_status.py --test
 Cycle order: `BOOTING`, `HOME/NO OBD`, `ECU CONNECT` (car), `LIVE`, `ERR`, `ECU CONNECT` (home).  
 `WAIT HTTP` is only available as a single screen (`--test-wait-http`), not in the auto cycle.
 
+In **test** mode (`--test` / `--test-screen` / shorthand flags), **network mode for OLED logic comes only from the fixture** (`net_mode` in the fake payload). The file `/etc/pib4ecu/net-mode` on the Pi is **not** read, so host `home`/`auto` cannot override what you are trying to preview. Normal polling from `/api/status` still uses the marker file when the API omits `net_mode`.
+
+Live ECU values (coolant / voltage / consumption) are drawn as a **two-line block vertically centered** on the 128×32 panel so the height is used evenly.
+
 The script **clears the panel** for `ECU_OLED_TEST_BLANK_BEFORE_S` before the cycle (so e.g. `HOME/NO OBD` from normal mode is gone cleanly). On exit (**Ctrl+C** or process end) it **clears the panel again**; turn normal operation back on with:
 
 ```bash

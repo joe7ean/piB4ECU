@@ -29,6 +29,7 @@ OLED_HEIGHT = 32
 # Extra vertical slack so descenders / bbox mismatch do not clip at the bottom edge.
 OLED_PAD_Y = int(os.environ.get("ECU_OLED_PAD_Y", "2"))
 OLED_INNER_H = OLED_HEIGHT - OLED_PAD_Y
+OLED_MIN_GAP_Y = int(os.environ.get("ECU_OLED_MIN_GAP_Y", "2"))
 LEFT_RIGHT_MARGIN = int(os.environ.get("ECU_OLED_MARGIN_X", "1"))
 LINE_GAP = int(os.environ.get("ECU_OLED_LINE_GAP", "1"))
 OLED_TTF_MAX_PT = int(os.environ.get("ECU_OLED_TTF_MAX", "26"))
@@ -300,6 +301,21 @@ def _line_metrics(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFon
     return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
+def _drawable_bottom() -> int:
+    """Bottom y (exclusive) for text area."""
+    return max(1, OLED_INNER_H)
+
+
+def _fit_two_line_top_bottom(h_top: int, h_bottom: int, min_gap: int) -> Optional[tuple[int, int]]:
+    """Return y positions for top and bottom lines or None if not enough height."""
+    y_top = 0
+    y_bottom = _drawable_bottom() - h_bottom
+    gap = y_bottom - (y_top + h_top)
+    if gap < min_gap:
+        return None
+    return y_top, y_bottom
+
+
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> tuple[int, int]:
     return _line_metrics(draw, text, font)
 
@@ -360,7 +376,7 @@ def _draw_lines_centered_vertical(
     heights = [_line_metrics(draw, ln, font)[1] for ln in lines]
     widths = [_line_metrics(draw, ln, font)[0] for ln in lines]
     total_h = sum(heights) + gap * max(0, len(lines) - 1)
-    y = max(0, (OLED_HEIGHT - total_h) // 2)
+    y = max(0, (_drawable_bottom() - total_h) // 2)
     for i, line in enumerate(lines):
         w = widths[i]
         x = max(0, (OLED_WIDTH - w) // 2)
@@ -377,7 +393,7 @@ def _draw_single_line_centered_fit(
     max_height: int,
 ) -> None:
     inner_w = min(max_width, OLED_WIDTH - 2 * LEFT_RIGHT_MARGIN)
-    cap_h = min(max_height, OLED_INNER_H)
+    cap_h = min(max_height, _drawable_bottom())
     if ttf_path:
         for pt in range(OLED_TTF_MAX_PT, OLED_TTF_MIN_PT - 1, -1):
             font = _try_truetype(ttf_path, pt)
@@ -405,12 +421,12 @@ def _draw_home_no_obd(draw: ImageDraw.ImageDraw, ttf_path: Optional[str], bitmap
             if font is None:
                 continue
             w, h = _line_metrics(draw, one_line, font)
-            if w <= inner_w and h <= OLED_INNER_H:
+            if w <= inner_w and h <= _drawable_bottom():
                 x = max(0, (OLED_WIDTH - w) // 2)
                 y = max(0, (OLED_HEIGHT - h) // 2)
                 draw.text((x, y), one_line, font=font, fill=255)
                 return
-        pair = max_font_size_for_lines(draw, ttf_path, ["HOME", "NO OBD"], inner_w, OLED_INNER_H)
+        pair = max_font_size_for_lines(draw, ttf_path, ["HOME", "NO OBD"], inner_w, _drawable_bottom())
         if pair:
             _draw_lines_centered_vertical(draw, ["HOME", "NO OBD"], pair[0])
             return
@@ -433,7 +449,7 @@ def _draw_err_block(
             w_t, h_t = _line_metrics(draw, title, t_font)
             if w_t > OLED_WIDTH - 2:
                 continue
-            rem_h = OLED_INNER_H - h_t - LINE_GAP
+            rem_h = _drawable_bottom() - h_t - OLED_MIN_GAP_Y
             if rem_h < OLED_TTF_MIN_PT:
                 continue
             for m_pt in range(min(t_pt - 1, 15), OLED_TTF_MIN_PT - 1, -1):
@@ -444,15 +460,19 @@ def _draw_err_block(
                 w_m, h_m = _line_metrics(draw, msg, m_font)
                 if h_m > rem_h or w_m > inner_w:
                     continue
-                total = h_t + LINE_GAP + h_m
-                if total <= OLED_INNER_H:
-                    y0 = max(0, (OLED_HEIGHT - total) // 2)
-                    x_t = max(0, (OLED_WIDTH - w_t) // 2)
-                    draw.text((x_t, y0), title, font=t_font, fill=255)
-                    y1 = y0 + h_t + LINE_GAP
-                    x_m = max(0, (OLED_WIDTH - w_m) // 2)
-                    draw.text((x_m, y1), msg, font=m_font, fill=255)
-                    return
+                pos = _fit_two_line_top_bottom(h_t, h_m, OLED_MIN_GAP_Y)
+                if pos is None:
+                    continue
+                y0, y1 = pos
+                x_t = max(0, (OLED_WIDTH - w_t) // 2)
+                x_m = max(0, (OLED_WIDTH - w_m) // 2)
+                bb_t = draw.textbbox((x_t, y0), title, font=t_font)
+                bb_m = draw.textbbox((x_m, y1), msg, font=m_font)
+                if max(bb_t[3], bb_m[3]) > OLED_HEIGHT - 1:
+                    continue
+                draw.text((x_t, y0), title, font=t_font, fill=255)
+                draw.text((x_m, y1), msg, font=m_font, fill=255)
+                return
     font = bitmap_font
     msg = _trim_to_width(draw, message.strip(), font, inner_w)
     lines = [title, msg]
@@ -527,11 +547,10 @@ def _render_live_two_row(
             if cw > inner:
                 line2 = _trim_to_width(draw, line2, font, inner)
                 cw, ch = _line_metrics(draw, line2, font)
-            if h1 + LINE_GAP + ch > OLED_INNER_H:
+            pos = _fit_two_line_top_bottom(h1, ch, OLED_MIN_GAP_Y)
+            if pos is None:
                 continue
-            block_h = h1 + LINE_GAP + ch
-            y_top = max(0, (OLED_HEIGHT - block_h) // 2)
-            y2 = y_top + h1 + LINE_GAP
+            y_top, y2 = pos
             x2 = max(0, (OLED_WIDTH - cw) // 2)
             bb_l = draw.textbbox((LEFT_RIGHT_MARGIN, y_top), left, font=font)
             bb_r = draw.textbbox((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y_top), right, font=font)
@@ -550,12 +569,15 @@ def _render_live_two_row(
     line2 = f"{primary} {extra}".strip() if extra else primary
     line2 = _trim_to_width(draw, line2, font, inner)
     cw, ch = _line_metrics(draw, line2, font)
-    if h1 + LINE_GAP + ch > OLED_INNER_H:
+    if _fit_two_line_top_bottom(h1, ch, OLED_MIN_GAP_Y) is None:
         line2 = _trim_to_width(draw, primary, font, inner)
         cw, ch = _line_metrics(draw, line2, font)
-    block_h = h1 + LINE_GAP + ch
-    y_top = max(0, (OLED_HEIGHT - block_h) // 2)
-    y2 = y_top + h1 + LINE_GAP
+    pos = _fit_two_line_top_bottom(h1, ch, OLED_MIN_GAP_Y)
+    if pos is None:
+        y_top = 0
+        y2 = min(_drawable_bottom() - ch, h1 + OLED_MIN_GAP_Y)
+    else:
+        y_top, y2 = pos
     x2 = max(0, (OLED_WIDTH - cw) // 2)
     draw.text((LEFT_RIGHT_MARGIN, y_top), left, font=font, fill=255)
     draw.text((OLED_WIDTH - LEFT_RIGHT_MARGIN - rw, y_top), right, font=font, fill=255)

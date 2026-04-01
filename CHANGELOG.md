@@ -18,6 +18,7 @@ All notable changes to this project are documented in this file.
 - OLED single-screen test fixtures: `--test-screen NAME` and shorthand `--test-live`, `--test-home-no-obd`, etc. (holds until Ctrl+C); overrides `ECU_OLED_TEST_CYCLE` when used.
 - OLED test rendering ignores host `/etc/pib4ecu/net-mode` (fixture `net_mode` only); live two-row view vertically centers the text block on 128×32.
 - OLED: exclusive lock file so only one `oled_status.py` uses I2C (avoids flicker if service + manual test); `ECU_OLED_PAD_Y` + stricter height / `textbbox` checks to reduce bottom clipping; env `ECU_OLED_LOCK_*`, `ECU_OLED_PAD_Y`.
+- OLED `LIVE` and `ERR` now use top/bottom anchored two-line rendering with minimum gap (`ECU_OLED_MIN_GAP_Y`) for clearer separation and better 32px height usage.
 
 ## [1.0.0-alpha.1] - 2026-03-26
 

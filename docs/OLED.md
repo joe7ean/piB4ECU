@@ -51,6 +51,7 @@ Optional tuning:
 - `ECU_OLED_MARGIN_X` — horizontal inset in pixels (default `1`).
 - `ECU_OLED_LINE_GAP` — gap between stacked lines (default `1`).
 - `ECU_OLED_PAD_Y` — reserved pixels at the bottom when fitting text (default `2`), reduces clipping of descenders on the live two-line layout.
+- `ECU_OLED_MIN_GAP_Y` — minimum vertical gap between first and second line in top/bottom two-line layouts (`LIVE`, `ERR`), default `2`.
 
 Install fonts on Lite if needed: `sudo apt install -y fonts-dejavu-core`
 
@@ -93,7 +94,12 @@ Cycle order: `BOOTING`, `HOME/NO OBD`, `ECU CONNECT` (car), `LIVE`, `ERR`, `ECU 
 
 In **test** mode (`--test` / `--test-screen` / shorthand flags), **network mode for OLED logic comes only from the fixture** (`net_mode` in the fake payload). The file `/etc/pib4ecu/net-mode` on the Pi is **not** read, so host `home`/`auto` cannot override what you are trying to preview. Normal polling from `/api/status` still uses the marker file when the API omits `net_mode`.
 
-Live ECU values (coolant / voltage / consumption) are drawn as a **two-line block vertically centered** on the 128×32 panel so the height is used evenly.
+Live ECU values and `ERR` details use a **top/bottom anchored two-line layout**: first line near top, second line near bottom, with a guaranteed minimum gap (`ECU_OLED_MIN_GAP_Y`) for readability.
+
+If line 2 still clips on your panel, try:
+- increase `ECU_OLED_PAD_Y` (e.g. `3` or `4`)
+- increase `ECU_OLED_MIN_GAP_Y` slightly
+- reduce max font: `ECU_OLED_TTF_MAX=24` (or lower)
 
 The script **clears the panel** for `ECU_OLED_TEST_BLANK_BEFORE_S` before the cycle (so e.g. `HOME/NO OBD` from normal mode is gone cleanly). On exit (**Ctrl+C** or process end) it **clears the panel again**; turn normal operation back on with:
 

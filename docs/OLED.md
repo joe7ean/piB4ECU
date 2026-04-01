@@ -158,3 +158,34 @@ sudo systemctl start oled-display
   The OLED view does not depend on fault-memory details.
 - Live consumption (`live_lph`, `live_l_per_100km`) is currently model-based and calibration-dependent.
   Values are already useful as trend/live indicator, but absolute precision is still improving.
+
+## Pixel hardware test
+
+Use `tools/oled_pixel_test.py` to verify raw panel geometry (all pixels and physical clipping) independent of ECU layout logic.
+
+Recommended flow:
+
+```bash
+sudo systemctl stop oled-display
+cd /path/to/piB4ECU
+source .venv/bin/activate
+
+# 1) full panel on/off
+python tools/oled_pixel_test.py --mode on --hold 2
+python tools/oled_pixel_test.py --mode off --hold 1
+
+# 2) check physical borders
+python tools/oled_pixel_test.py --mode border --hold 3
+
+# 3) scan rows and columns
+python tools/oled_pixel_test.py --mode rows --interval 0.08
+python tools/oled_pixel_test.py --mode cols --interval 0.04
+```
+
+If the bottom rows/edges are visible in this test, your panel hardware is fine and clipping comes from typography/layout settings.
+
+After testing:
+
+```bash
+sudo systemctl start oled-display
+```
